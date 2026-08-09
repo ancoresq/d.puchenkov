@@ -59,18 +59,34 @@
     --void-edge:   #1e2225;
     --chalk:       #eceae4;
     --chalk-soft:  #9ea1a3;
-    --chalk-faint: #63676b;
+    /* Приглушённый серый раньше был #63676b — на чёрном это 3.5:1,
+       ниже нормы 4.5:1 для текста. Подняли до 4.5:1, оттенок тот же. */
+    --chalk-faint: #74797e;
     --steel:       #5b93bd;
     --steel-glow:  #8cc0e4;
+
+    /* Синий раньше жил только в тонких линиях, поэтому страница
+       читалась сплошным серым. Ступени ниже — тот же тон в разной
+       прозрачности: ими красим заливки, рамки и свечения, не вводя
+       второй цвет в палитру.                                      */
+    --steel-wash:  rgba(91, 147, 189, 0.07);
+    --steel-edge:  rgba(91, 147, 189, 0.24);
+    --steel-haze:  rgba(91, 147, 189, 0.42);
 
     --display: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display",
                "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas,
             "Liberation Mono", Menlo, monospace;
 
+    /* Трекинг держим в токенах: крупный кегль требует отрицательного,
+       мелкие капсы — широкого. Разнобой по файлу читался как небрежность. */
+    --track-display: -0.035em;
+    --track-head:    -0.028em;
+    --track-caps:     0.16em;
+
     --ease: cubic-bezier(0.16, 1, 0.3, 1);
     --slow: 1.6s;          /* базовая длительность появлений */
-    --gut: clamp(20px, 5vw, 64px);
+    --gut: clamp(24px, 5vw, 64px);
   }
 
   * { box-sizing: border-box; }
@@ -88,10 +104,20 @@
     font-size: 16px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    /* Системные шрифты почти все переменные: разрешаем им менять
+       начертание под кегль — крупные строки становятся плотнее,
+       мелкие подписи шире и разборчивее.                          */
+    font-optical-sizing: auto;
     overflow-x: hidden;
   }
 
+  /* Абзацы висли последним словом на отдельной строке; pretty
+     разводит переносы, не трогая ширину колонки. */
+  p { text-wrap: pretty; }
+
   a { color: inherit; text-decoration: none; }
+
+  ::selection { background: var(--steel-haze); color: var(--chalk); }
 
   :focus-visible {
     outline: 2px solid var(--steel-glow);
@@ -478,21 +504,80 @@
 
   /* ─── ЗАГОЛОВКИ СЕКЦИЙ ───────────────────────────────────── */
   .band { padding: clamp(90px, 13vw, 165px) 0; }
+  /* Секции шли встык и на телефоне сливались в одно полотно: там,
+     где на широком экране их разделяет воздух, на узком воздуха не
+     хватает. Волосяная линия по верхнему краю ставит границу, а
+     затухание к краям не даёт ей выглядеть чертой таблицы.        */
+  .band + .band::before,
+  .band + .close::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: var(--gut);
+    right: var(--gut);
+    height: 1px;
+    background: linear-gradient(to right,
+      transparent, var(--void-edge) 22%, var(--void-edge) 78%, transparent);
+    /* фоновая пластина лежит на z-index 0, содержимое на 2 —
+       линия должна пройти между ними */
+    z-index: 1;
+  }
+
+  /* Якорные переходы из меню упирали заголовок под липкую шапку —
+     резервируем её высоту. */
+  section[id] { scroll-margin-top: 92px; }
+
+  /* Надзаголовок секции. Держит ритм по вертикали и возвращает
+     синий в макет: раньше акцент жил только в паре тонких линий,
+     из-за чего страница читалась сплошным серым.                 */
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+    color: var(--steel);
+    margin: 0 0 18px;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 0 0 auto;
+    width: 38px;
+    height: 1px;
+    background: linear-gradient(to right, var(--steel-haze), transparent);
+  }
 
   h2 {
     font-size: clamp(28px, 5vw, 52px);
     font-weight: 800;
-    letter-spacing: -0.03em;
+    letter-spacing: var(--track-head);
     line-height: 1.05;
     margin: 0 0 18px;
     max-width: 20ch;
     text-wrap: balance;
+  }
+  /* Все заголовки шли одним весом — набор выглядел плоско. Светлый
+     курсив во второй части даёт контраст начертаний, как в h1. */
+  h2 em {
+    font-style: italic;
+    font-weight: 300;
+    color: var(--chalk-soft);
+    letter-spacing: -0.015em;
   }
   .band-note {
     color: var(--chalk-soft);
     font-size: 16px;
     max-width: 54ch;
     margin: 0 0 clamp(44px, 6vw, 76px);
+  }
+  /* На узком экране заголовок и подпись почти касались следующего
+     блока — на мобильном добавляем воздуха под шапкой секции. */
+  @media (max-width: 700px) {
+    .eyebrow { margin-bottom: 14px; }
+    h2 { margin-bottom: 14px; }
+    .band-note { margin-bottom: 40px; }
   }
 
   /* ─── УСЛУГИ ─────────────────────────────────────────────── */
@@ -507,7 +592,11 @@
     transition: background 0.7s var(--ease);
   }
   .job:last-child { border-bottom: 1px solid var(--void-edge); }
-  .job:hover { background: rgba(236, 234, 228, 0.018); }
+  /* Подсветка строки была белесой — на чёрном она читалась как
+     выцветание, а не как отклик. Тот же приём в акцентном тоне
+     держит наведение заметным и не вводит новый цвет. */
+  .job:hover { background: var(--steel-wash); }
+  .job:hover .job-idx { color: var(--steel-glow); }
   @media (max-width: 860px) { .job { grid-template-columns: 1fr; gap: 14px; } }
 
   .job-idx {
@@ -516,6 +605,9 @@
     color: var(--steel);
     letter-spacing: 0.12em;
     padding-top: 8px;
+    /* цифры разной ширины дёргали колонку при наведении */
+    font-variant-numeric: tabular-nums;
+    transition: color 0.5s var(--ease);
   }
   .job h3 {
     font-size: clamp(21px, 2.8vw, 29px);
@@ -529,7 +621,9 @@
   .chips { display: flex; flex-wrap: wrap; gap: 7px; }
   .chip {
     font-family: var(--mono);
-    font-size: 11px;
+    /* 11px моношириной — мелко для подписи; 12px читается заметно
+       лучше и не ломает раскладку плашек */
+    font-size: 12px;
     letter-spacing: 0.05em;
     color: var(--chalk-faint);
     border: 1px solid var(--void-edge);
@@ -537,7 +631,7 @@
     padding: 4px 11px;
     transition: color 0.5s var(--ease), border-color 0.5s var(--ease);
   }
-  .job:hover .chip { color: var(--chalk-soft); border-color: #2a2f33; }
+  .job:hover .chip { color: var(--chalk-soft); border-color: var(--steel-edge); }
 
   /* ─── КАРУСЕЛЬ РАБОТ (coverflow) ──────────────────────────────
      Карточки лежат друг за другом в перспективе: центральная
@@ -621,7 +715,13 @@
     transition: opacity 0.3s var(--ease);
     pointer-events: none;
   }
-  .deck-card.is-active .shot { border-color: #2b3236; }
+  /* Центральную карточку от боковых отличала только резкость —
+     в статике непонятно, какая из них активна. Тонкий акцентный
+     кант обозначает её, не перебивая сам кадр. */
+  .deck-card.is-active .shot {
+    border-color: var(--steel-edge);
+    box-shadow: 0 26px 60px rgba(0, 0, 0, 0.62), 0 0 0 1px var(--steel-wash);
+  }
   .deck-card.is-active:hover .shot,
   .deck-card.is-active:focus-visible .shot { border-color: var(--steel); }
 
@@ -736,6 +836,8 @@
     margin-left: 4px;
     min-width: 52px;
     text-align: right;
+    /* без табличных цифр счётчик дёргается по ширине при листании */
+    font-variant-numeric: tabular-nums;
   }
   .deck-count b { color: var(--chalk); font-weight: 500; }
 
@@ -766,12 +868,17 @@
   .cell:hover { background: var(--void-lift); }
   .cell h4 {
     font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.16em;
+    /* 11px для капса с широким трекингом — на грани читаемости,
+       особенно на телефоне; поднимаем до 12px. */
+    font-size: 12px;
+    letter-spacing: var(--track-caps);
     text-transform: uppercase;
     color: var(--steel);
     margin: 0 0 16px;
     font-weight: 500;
+    /* заголовок колонки отбит от списка тонкой акцентной чертой */
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--steel-edge);
   }
   .cell ul {
     list-style: none;
@@ -990,7 +1097,8 @@
   </div>
 
   <div class="shell">
-    <h2 class="rise">Три направления</h2>
+    <p class="eyebrow rise">01 — Услуги</p>
+    <h2 class="rise">Три <em>направления</em></h2>
     <p class="band-note rise d1">Каждое довожу до рабочего результата, а не до макета в папке.</p>
 
     <div class="work">
@@ -1048,6 +1156,7 @@
      здесь только оболочка и органы управления. -->
 <section class="band" id="works">
   <div class="shell">
+    <p class="eyebrow rise">02 — Портфолио</p>
     <h2 class="rise">Работы</h2>
     <p class="band-note rise d1">Листайте вбок: мышью, свайпом или стрелками на клавиатуре.</p>
   </div>
@@ -1091,7 +1200,8 @@
   </div>
 
   <div class="shell">
-    <h2 class="rise">Чем работаю</h2>
+    <p class="eyebrow rise">03 — Инструменты</p>
+    <h2 class="rise">Чем <em>работаю</em></h2>
     <p class="band-note rise d1">Инструменты подбираю под задачу, а не наоборот.</p>
 
     <div class="stack-grid">
@@ -1150,7 +1260,8 @@
 <!-- РАЗДЕЛ: ПРОЦЕСС -->
 <section class="band" id="process">
   <div class="shell">
-    <h2 class="rise">Как идёт работа</h2>
+    <p class="eyebrow rise">04 — Процесс</p>
+    <h2 class="rise">Как идёт <em>работа</em></h2>
     <p class="band-note rise d1">Три шага, без сюрпризов в середине.</p>
 
     <div class="flow">
@@ -1181,7 +1292,8 @@
   </div>
 
   <div class="shell">
-    <h2 class="rise">Расскажите, что нужно сделать</h2>
+    <p class="eyebrow rise">05 — Контакты</p>
+    <h2 class="rise">Расскажите, <em>что нужно сделать</em></h2>
     <p class="rise d1">Напишите в Telegram пару строк о задаче. Отвечу в течение дня и скажу честно, моя это работа или лучше поискать другого исполнителя.</p>
     <div class="rise d2">
       <a class="btn" href="https://t.me/gothY1L" target="_blank" rel="noopener">
