@@ -59,7 +59,11 @@
   "description": "Разработка Telegram-ботов и автоматизации, карточки товаров для маркетплейсов, лендинги и сайты.",
   "areaServed": "RU",
   "availableLanguage": "ru",
-  "sameAs": ["https://t.me/gothY1L"],
+  "email": "d.puchenkov@mail.ru",
+  "sameAs": [
+    "https://t.me/gothY1L",
+    "https://kwork.ru/user/gothywebdesign"
+  ],
   "knowsAbout": [
     "Telegram Bot API", "Node.js", "Python", "JavaScript",
     "Инфографика для маркетплейсов", "Ozon", "Wildberries",
@@ -1863,9 +1867,13 @@
      тем, как написать незнакомому исполнителю.                  */
   .ways {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(252px, 1fr));
+    /* Пока каналов было два, три колонки читались нормально.
+       Теперь их четыре, и в тройке последняя карточка оставалась
+       одна во втором ряду, а адрес профиля рвался посреди слова.
+       Две колонки дают ровный блок 2×2 и строку под адрес. */
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 12px;
-    max-width: 880px;
+    max-width: 800px;
     margin: 0;
   }
   .way {
@@ -2152,7 +2160,7 @@
     </div>
     <div class="hero-meta lift l4">
       <div>Ответ<b>В течение дня</b></div>
-      <div>Связь<b>Telegram · Kwork</b></div>
+      <div>Связь<b>Telegram · Kwork · Почта</b></div>
     </div>
   </div>
 </section>
@@ -2459,9 +2467,11 @@
          давали. -->
     <dl class="facts rise d2" data-facts hidden></dl>
 
-    <!-- Карточки Kwork и почты появляются, только когда в CHANNELS
-         внизу файла вписан адрес. Пустое поле убирает карточку
-         целиком, чтобы на странице не осталось ссылки в никуда. -->
+    <!-- Адреса стоят прямо в разметке, чтобы контакты работали и
+         без скрипта. CHANNELS внизу файла остаётся управляющим:
+         он подставляет те же значения заново, а пустое поле там
+         убирает карточку целиком, чтобы на странице не осталось
+         ссылки в никуда. Меняете адрес — поменяйте в обоих местах. -->
     <div class="ways rise d2">
       <a class="way way-lead" href="https://t.me/gothY1L" target="_blank" rel="noopener">
         <span class="way-ico" aria-hidden="true">
@@ -2488,7 +2498,7 @@
         </span>
       </a>
 
-      <a class="way" data-way="kwork" target="_blank" rel="noopener">
+      <a class="way" data-way="kwork" href="https://kwork.ru/user/gothywebdesign" target="_blank" rel="noopener">
         <span class="way-ico" aria-hidden="true">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <rect x="1.8" y="5.5" width="16.4" height="11.7" rx="2"
@@ -2500,7 +2510,7 @@
         <span class="way-body">
           <h3>Kwork</h3>
           <p>Заказ через биржу, если так спокойнее.</p>
-          <span class="way-at"></span>
+          <span class="way-at">kwork.ru/user/gothywebdesign</span>
         </span>
         <span class="way-go" aria-hidden="true">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
@@ -2511,7 +2521,7 @@
         </span>
       </a>
 
-      <a class="way" data-way="email">
+      <a class="way" data-way="email" href="mailto:d.puchenkov@mail.ru">
         <span class="way-ico" aria-hidden="true">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <rect x="1.8" y="4" width="16.4" height="12" rx="2"
@@ -2524,7 +2534,7 @@
         <span class="way-body">
           <h3>Почта</h3>
           <p>Для писем с подробным описанием и файлами.</p>
-          <span class="way-at"></span>
+          <span class="way-at">d.puchenkov@mail.ru</span>
         </span>
         <span class="way-go" aria-hidden="true">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
@@ -2823,10 +2833,9 @@
        пять ссылок на странице ведут в один Telegram: человеку без
        телеграма выйти на вас не через что.
 
-       Вписать так:
-         kwork: "https://kwork.ru/user/ваш-профиль",
-         email: "вы@почта.ру"
-       Карточки появятся сами, ничего больше править не нужно.   */
+       Те же адреса продублированы в разметке карточек: без этого
+       раздел контактов пустел бы, когда скрипт не выполнился.
+       Меняете адрес — поменяйте в обоих местах.                 */
     /* ══ ФАКТЫ О РАБОТЕ ══════════════════════════════════════
        Заказчик решает не по списку технологий, а по ответам на
        «кто это», «что будет после сдачи» и «как платить». Сейчас
@@ -2883,8 +2892,8 @@
     })();
 
     var CHANNELS = {
-      kwork: "",
-      email: ""
+      kwork: "https://kwork.ru/user/gothywebdesign",
+      email: "d.puchenkov@mail.ru"
     };
 
     (function channels() {
