@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Страница не найдена — D.PUCHENKOV</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2308090a'/%3E%3Ctext x='32' y='44' font-family='system-ui,sans-serif' font-size='34' font-weight='700' fill='%23eceae4' text-anchor='middle'%3ED%3C/text%3E%3Ccircle cx='47' cy='40' r='3.4' fill='%235b93bd'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#08090a">
+<style>
+  /* GitHub Pages отдаёт этот файл на любой несуществующий путь —
+     страница живёт отдельно от index.html и своих стилей оттуда
+     не получает. Токены продублированы намеренно: заводить общий
+     CSS-файл ради одной страницы значило бы добавить сайту первый
+     внешний запрос, которых у него по дизайну ноль. */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #08090a;
+    color: #eceae4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display",
+                 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  body {
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    text-align: center;
+  }
+  .code {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas,
+                 "Liberation Mono", Menlo, monospace;
+    font-size: clamp(15px, 2.4vw, 17px);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #5b93bd;
+    margin: 0 0 20px;
+  }
+  h1 {
+    font-size: clamp(30px, 6vw, 48px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin: 0 0 16px;
+  }
+  p {
+    max-width: 40ch;
+    margin: 0 auto 34px;
+    color: #9ea1a3;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  a {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 13px 26px;
+    border-radius: 999px;
+    background: #eceae4;
+    color: #08090a;
+    font-weight: 700;
+    font-size: 15px;
+    text-decoration: none;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  a:hover { transform: translateY(-2px); }
+  a:focus-visible { outline: 2px solid #8cc0e4; outline-offset: 4px; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+  <div>
+    <p class="code">404 · Страница не найдена</p>
+    <h1>Такой страницы нет</h1>
+    <p>Портфолио живёт на одной странице — возможно, ссылка устарела или в адресе опечатка.</p>
+    <a href="/">
+      На главную
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+        <path d="M2.5 10.5L10.5 2.5M10.5 2.5H4.5M10.5 2.5V8.5"
+              stroke="currentColor" stroke-width="1.6"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+  </div>
+</body>
+</html>
