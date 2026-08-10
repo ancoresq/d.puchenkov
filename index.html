@@ -48,6 +48,33 @@
 
 <link rel="canonical" href="https://puchenkoff.ru/">
 
+<!-- ─── ПОДТВЕРЖДЕНИЕ ВЛАДЕНИЯ САЙТОМ ──────────────────────────────
+     Google Search Console и Яндекс.Вебмастер должны убедиться, что
+     сайтом управляете именно вы, прежде чем покажут статистику
+     показов и позиций. Способ через мета-тег выбран вместо
+     DNS-TXT-записи: правка одной строки в файле и обычный пуш —
+     без похода в панель регистратора и ожидания, пока запись
+     разойдётся (см. историю с самим доменом).
+
+     КАК ПОДКЛЮЧИТЬ:
+     1. Google Search Console (search.google.com/search-console) →
+        «Добавить ресурс» → puchenkoff.ru → способ подтверждения
+        «HTML-тег» → скопировать значение content="..." оттуда и
+        вписать в meta[name="google-site-verification"] ниже.
+     2. Яндекс.Вебмастер (webmaster.yandex.ru) → «Добавить сайт» →
+        puchenkoff.ru → «Мета-тег» → так же вписать значение в
+        meta[name="yandex-verification"].
+     3. Закоммитить и запушить — правило в robots.txt уже открывает
+        сайт целиком для обоих ботов.
+     4. Вернуться в кабинет и нажать «Подтвердить». После этого же
+        не забыть отправить sitemap.xml — сама верификация её не
+        отправляет.
+
+     Пока строки content="" пустые, боты просто игнорируют тег —
+     удалять их до получения кода не нужно. -->
+<meta name="google-site-verification" content="">
+<meta name="yandex-verification" content="">
+
 <!-- Значок вкладки нарисован прямо здесь: внешний файл добавил бы
      сайту запрос, которых у него сейчас ноль. -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2308090a'/%3E%3Ctext x='32' y='44' font-family='system-ui,sans-serif' font-size='34' font-weight='700' fill='%23eceae4' text-anchor='middle'%3ED%3C/text%3E%3Ccircle cx='47' cy='40' r='3.4' fill='%235b93bd'/%3E%3C/svg%3E">
