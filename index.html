@@ -19,10 +19,14 @@
      заголовка, описания и картинки — рядом с конкурентом, у
      которого превью есть, это проигрыш ещё до открытия.
 
-     ПОСЛЕ ПРИВЯЗКИ ДОМЕНА: раскомментировать og:url и canonical и
-     подставить адрес. Картинке og:image тоже нужен полный адрес
-     вида https://ваш-домен/og.png — относительный путь читают не
-     все боты. -->
+     Адрес сайта — puchenkoff.ru, и он прописан здесь буквально.
+     Иначе нельзя: боты не исполняют скрипты, подставить домен
+     переменной невозможно. Полный адрес у картинки обязателен —
+     относительный путь читают не все боты.
+
+     МЕНЯЕТЕ ДОМЕН: поправьте og:url, og:image, twitter:image,
+     canonical и url в разметке ld+json ниже, а также файлы CNAME
+     и sitemap.xml рядом со страницей. -->
 <meta name="description" content="Телеграм-боты, карточки товаров для маркетплейсов и лендинги. Беру задачу целиком: от постановки до запуска на боевом сервере. Срок и цену называю до начала работы, отвечаю в течение дня.">
 <meta name="author" content="D.PUCHENKOV">
 
@@ -31,18 +35,18 @@
 <meta property="og:site_name" content="D.PUCHENKOV">
 <meta property="og:title" content="D.PUCHENKOV — боты, карточки для маркетплейсов, лендинги">
 <meta property="og:description" content="Беру задачу целиком: от постановки до запуска на боевом сервере. Срок и цену называю до начала работы.">
-<meta property="og:image" content="og.jpg">
+<meta property="og:image" content="https://puchenkoff.ru/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="D.PUCHENKOV — разработка и дизайн">
-<!-- <meta property="og:url" content="https://ВАШ-ДОМЕН/"> -->
+<meta property="og:url" content="https://puchenkoff.ru/">
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="D.PUCHENKOV — боты, карточки для маркетплейсов, лендинги">
 <meta name="twitter:description" content="Беру задачу целиком: от постановки до запуска на боевом сервере.">
-<meta name="twitter:image" content="og.jpg">
+<meta name="twitter:image" content="https://puchenkoff.ru/og.jpg">
 
-<!-- <link rel="canonical" href="https://ВАШ-ДОМЕН/"> -->
+<link rel="canonical" href="https://puchenkoff.ru/">
 
 <!-- Значок вкладки нарисован прямо здесь: внешний файл добавил бы
      сайту запрос, которых у него сейчас ноль. -->
@@ -56,6 +60,8 @@
   "@context": "https://schema.org",
   "@type": "ProfessionalService",
   "name": "D.PUCHENKOV",
+  "url": "https://puchenkoff.ru/",
+  "image": "https://puchenkoff.ru/og.jpg",
   "description": "Разработка Telegram-ботов и автоматизации, карточки товаров для маркетплейсов, лендинги и сайты.",
   "areaServed": "RU",
   "availableLanguage": "ru",
