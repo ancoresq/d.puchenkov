@@ -359,15 +359,21 @@
     background: var(--steel-haze);
   }
 
+  /* Серая рамка на чёрном делала из этой кнопки ещё одну ссылку в
+     ряду. Заливка и синий контур отделяют её от навигации: в шапке
+     видно, что тут не переход по странице, а действие.            */
   .nav-contact {
-    border: 1px solid var(--void-edge);
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--steel-edge);
+    background: var(--steel-wash);
     border-radius: 999px;
-    padding: 8px 18px;
+    padding: 9px 18px;
     color: var(--chalk);
     transition: border-color 0.55s var(--ease), background 0.55s var(--ease);
   }
   .nav-contact::after { display: none; }
-  .nav-contact:hover { border-color: var(--steel); background: rgba(91, 147, 189, 0.12); }
+  .nav-contact:hover { border-color: var(--steel); background: rgba(91, 147, 189, 0.16); }
 
   /* ─── МЕНЮ НА УЗКОМ ЭКРАНЕ ───────────────────────────────────
      Раньше ссылки на телефоне просто прятались: в шапке оставались
@@ -391,6 +397,9 @@
   @media (max-width: 760px) {
     .nav-links a:not(.nav-contact) { display: none; }
     .nav-burger { display: grid; }
+    /* На телефоне это единственная кнопка действия, которая видна
+       всегда, — доводим до нормы касания в 44px. */
+    .nav-contact { min-height: 44px; padding: 0 18px; }
   }
 
   .burger-box { display: block; position: relative; width: 20px; height: 12px; }
@@ -565,26 +574,54 @@
     margin: 0 0 44px;
   }
 
-  .hero-cta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .hero-cta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 
+  /* ─── ДЕЙСТВИЯ ───────────────────────────────────────────────
+     Главное действие на странице одно — написать. Раньше оно было
+     такой же ровной белой плашкой, как любая кнопка в интерфейсе:
+     на чёрном листе читалось как деталь, а не как приглашение.
+     Теперь под пилюлей лежит холодное свечение тем же синим, что
+     и остальные акценты, а при наведении по ней проходит блик —
+     кнопка выглядит подсвеченной, а не наклеенной.               */
   .btn {
     display: inline-flex;
     align-items: center;
     gap: 14px;
-    background: var(--chalk);
+    /* Полоса #fff внутри градиента и есть блик. В покое она стоит
+       за правым краем, на наведении переезжает влево. Двигается
+       только позиция фона, поэтому самой заливке нечем мигнуть.  */
+    background:
+      linear-gradient(100deg,
+        var(--chalk) 0%,  var(--chalk) 38%,
+        /* холоднее и светлее мела: чистый белый на тёплом белом
+           почти не виден, а с синей ноткой блик читается и заодно
+           попадает в общий акцент страницы */
+        #f7fbff 50%,
+        var(--chalk) 62%, var(--chalk) 100%);
+    background-size: 260% 100%;
+    background-position: 100% 0;
     color: var(--void);
-    font-size: 15px;
+    font-size: 15.5px;
     font-weight: 700;
     letter-spacing: -0.01em;
-    padding: 8px 8px 8px 26px;
+    padding: 8px 8px 8px 30px;
     border: none;
     border-radius: 999px;
     cursor: pointer;
     font-family: inherit;
-    transition: transform 0.55s var(--ease), background 0.55s var(--ease);
+    /* Два слоя света: широкий разлив держит ореол на десятки
+       пикселей вокруг, узкий подсвечивает саму подложку. Одним
+       слоем получалась тень с синим краем, а не свечение.       */
+    box-shadow:
+      0 20px 56px -14px rgba(140, 192, 228, 0.5),
+      0 6px 18px -6px rgba(140, 192, 228, 0.32);
+    transition:
+      transform 0.55s var(--ease),
+      box-shadow 0.55s var(--ease),
+      background-position 0.75s var(--ease);
   }
   .btn .pip {
-    width: 34px; height: 34px;
+    width: 36px; height: 36px;
     border-radius: 999px;
     background: rgba(8, 9, 10, 0.09);
     display: grid;
@@ -592,9 +629,83 @@
     transition: transform 0.55s var(--ease), background 0.55s var(--ease);
   }
   .btn .pip svg { display: block; }
-  .btn:hover { transform: translateY(-2px) scale(1.02); background: #fff; }
+  .btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    background-position: 0 0;
+    box-shadow:
+      0 28px 72px -14px rgba(140, 192, 228, 0.72),
+      0 8px 24px -6px rgba(140, 192, 228, 0.45);
+  }
   .btn:hover .pip { transform: translate(3px, -3px); background: rgba(8, 9, 10, 0.17); }
   .btn:active { transform: translateY(0) scale(0.98); }
+
+  /* Второй выход из первого экрана. Без него у того, кто ещё не
+     готов писать незнакомому исполнителю, оставался ровно один
+     путь — прокрутка наугад. Ведём в «Процесс»: там сказано, что
+     будет после первого сообщения.                               */
+  .btn-quiet {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;          /* вровень с главной кнопкой */
+    padding: 0 24px;
+    border: 1px solid var(--steel-edge);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--chalk);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    transition:
+      border-color 0.55s var(--ease),
+      background 0.55s var(--ease),
+      transform 0.55s var(--ease);
+  }
+  .btn-quiet svg {
+    display: block;
+    color: var(--steel-glow);
+    transition: transform 0.55s var(--ease);
+  }
+  .btn-quiet:hover {
+    border-color: var(--steel);
+    background: var(--steel-wash);
+    transform: translateY(-2px);
+  }
+  .btn-quiet:hover svg { transform: translateY(2px); }
+  .btn-quiet:active { transform: translateY(0) scale(0.98); }
+
+  /* Ниже этой ширины кнопки всё равно встают в столбец, и разная
+     длина плашек читалась как случайность. Растягиваем обе на
+     колонку: край получается ровным, а попасть пальцем проще.   */
+  @media (max-width: 520px) {
+    .hero-cta { display: grid; grid-template-columns: 1fr; }
+    .btn { justify-content: space-between; }
+    .btn-quiet { justify-content: center; }
+  }
+
+  /* Строка снимает главный страх перед первым сообщением — во что
+     оно выльется. Обещание то же, что в разделе «Процесс», просто
+     сказано там, где на него решаются.                           */
+  .cta-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 20px 0 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    color: var(--chalk-soft);
+  }
+  .cta-note::before {
+    content: "";
+    flex: none;
+    width: 5px; height: 5px;
+    border-radius: 999px;
+    background: var(--steel-glow);
+    box-shadow: 0 0 0 4px var(--steel-wash);
+  }
 
   .hero-meta {
     display: flex;
@@ -762,6 +873,49 @@
     transition: color 0.5s var(--ease), border-color 0.5s var(--ease);
   }
   .job:hover .chip { color: var(--chalk-soft); border-color: var(--steel-edge); }
+
+  /* ─── ПРИГЛАШЕНИЕ В КОНЦЕ РАЗДЕЛА ────────────────────────────
+     Дочитав список услуг, человек уже понял, его это задача или
+     нет. Но до контактов оставалось ещё три экрана, и решение
+     успевало остыть по дороге. Это не вторая главная кнопка —
+     намеренно ссылка, чтобы не спорить с первым экраном.         */
+  .ask {
+    display: flex;
+    align-items: center;
+    gap: 6px 16px;
+    flex-wrap: wrap;
+    /* Своей линии сверху не рисуем: список услуг уже закрыт рамкой
+       последней строки, и вторая полоса рядом читалась ошибкой. */
+    margin: clamp(30px, 4vw, 46px) 0 0;
+    font-size: 16px;
+    color: var(--chalk-soft);
+  }
+  .ask-go {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    /* отступы догоняют строку до нормы касания в 44px */
+    padding: 12px 2px;
+    color: var(--chalk);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .ask-go::after {
+    content: "";
+    position: absolute;
+    left: 2px; right: 2px; bottom: 9px;
+    height: 1px;
+    background: var(--steel);
+    transition: background 0.5s var(--ease);
+  }
+  .ask-go svg {
+    display: block;
+    color: var(--steel-glow);
+    transition: transform 0.5s var(--ease);
+  }
+  .ask-go:hover::after { background: var(--steel-glow); }
+  .ask-go:hover svg { transform: translateY(2px); }
 
   /* ─── КАРУСЕЛЬ РАБОТ (coverflow) ──────────────────────────────
      Карточки лежат друг за другом в перспективе: центральная
@@ -1316,9 +1470,15 @@
     /* дрожание зерна убираем: это чистое движение */
     .grain { animation: none; }
 
-    /* ховеры оставляем: они по действию пользователя, не сами */
-    .btn:hover { transform: none; }
+    /* ховеры оставляем: они по действию пользователя, не сами.
+       Убираем только перемещения — блик по кнопке это тоже ход,
+       поэтому держим полосу за краем и меняем лишь свечение.     */
+    .btn:hover { transform: none; background-position: 100% 0; }
     .btn:active { transform: scale(0.99); }
+    .btn-quiet:hover { transform: none; }
+    .btn-quiet:hover svg { transform: none; }
+    .btn-quiet:active { transform: scale(0.99); }
+    .ask-go:hover svg { transform: none; }
 
     /* Карусель: 3D-разворот и уход вглубь — это чистое движение,
        поэтому раскладываем карточки плоско и прячем всё, кроме
@@ -1419,7 +1579,16 @@
             </svg>
           </span>
         </a>
+        <a class="btn-quiet" data-scroll="process" role="link" tabindex="0">
+          Как идёт работа
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+            <path d="M6.5 2v8.5M3 7l3.5 3.5L10 7"
+                  stroke="currentColor" stroke-width="1.4"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
       </div>
+      <p class="cta-note lift l4">Назову срок и цену до начала работы</p>
     </div>
     <div class="hero-meta lift l4">
       <div>Ответ<b>В течение дня</b></div>
@@ -1487,6 +1656,18 @@
         </div>
       </article>
     </div>
+
+    <p class="ask rise d3">
+      Похоже на вашу задачу?
+      <a class="ask-go" data-scroll="contact" role="link" tabindex="0">
+        Обсудить задачу
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+          <path d="M6.5 2v8.5M3 7l3.5 3.5L10 7"
+                stroke="currentColor" stroke-width="1.4"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </p>
   </div>
 </section>
 
@@ -1884,9 +2065,12 @@
        секция рядом с длинной никогда не становится текущей.      */
     (function spy() {
       var marks = scrollLinks
-        /* логотип ведёт наверх и разделом не является — метка
-           «вы здесь» на нём только сбивала бы диктор */
-        .filter(function (link) { return !link.classList.contains("wordmark"); })
+        /* Метка «вы здесь» уместна только в навигации. Логотип ведёт
+           наверх и разделом не является, а кнопки-приглашения по
+           тексту страницы — это действия, а не указатели места:
+           диктор объявлял бы «текущая страница» на кнопке, и порядок
+           таких ссылок в разметке сбивал бы расчёт активного раздела. */
+        .filter(function (link) { return !!link.closest(".nav-links, .menu-list"); })
         .map(function (link) {
           return { link: link, el: document.getElementById(link.getAttribute("data-scroll")) };
         })
