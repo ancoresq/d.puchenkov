@@ -36,18 +36,31 @@
     массиве = порядок на экране. Чтобы добавить работу, допиши
     в массив ещё один объект, карточка появится сама.
 
+    Тексты и цифры там сейчас — образцы: они показывают, какой
+    длины и какого рода бывает каждое поле. Перед показом сайта
+    заказчику замени их на свои.
+
+    Клик по центральной карточке открывает кейс — слой поверх
+    страницы с задачей, решением и результатом. Он собирается из
+    той же работы, отдельных страниц заводить не нужно.
+
     В каждой работе:
       title  заголовок под карточкой
       note   строка описания
       tags   подписи-плашки
+      kind   какой макет рисует заглушка вместо снимка:
+             landing, cards, bot, catalog, data, quiz
       shot   картинка: строка base64 или путь к файлу рядом со
-             страницей. Пустые кавычки = карточку нарисует код,
+             страницей. Пустые кавычки = кадр нарисует код,
              это временная заглушка вместо снимка.
-      url    адрес страницы работы. Пока пусто, клик просто
-             выводит карточку в центр. Впишешь адрес, например
-             "works/landing.html", и карточка станет ссылкой:
-             центральную открываем по клику, боковые сперва
-             подъезжают к центру.
+      year, role, term  паспорт работы в шапке кейса
+      task   задача клиента, один абзац
+      did    список: что сделано
+      result цифры результата: n — число, of — что оно значит
+      stack  инструменты, плашками
+      live   живая ссылка, если работу можно открыть:
+             { href: "https://…", label: "Открыть сайт" }.
+             Оставить null — кнопки в кейсе просто не будет.
   ════════════════════════════════════════════════════════════════
 -->
 
@@ -1107,6 +1120,387 @@
   }
   .card-note .chips { justify-content: center; }
 
+  /* Приглашение открыть кейс. Без него карточка выглядит просто
+     картинкой: курсор-палец виден только при наведении мышью, а на
+     телефоне не виден вообще — и половина работ так и остаётся
+     нераскрытой. Строка говорит прямо, что за карточкой есть
+     продолжение.                                                 */
+  .card-open {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+    color: var(--steel-glow);
+  }
+  .card-open svg {
+    display: block;
+    transition: transform 0.45s var(--ease);
+  }
+  .deck-card.is-active:hover .card-open svg,
+  .deck-card.is-active:focus-visible .card-open svg { transform: translateX(3px); }
+
+  /* ─── КЕЙС РАБОТЫ ─────────────────────────────────────────────
+     Карточка в карусели показывает работу одним кадром, но главный
+     вопрос — что здесь было сделано и что из этого вышло — кадром
+     не отвечается. Ответ живёт в слое поверх страницы: он
+     открывается по клику на центральную карточку и никуда не
+     уводит. Отдельными страницами не делаем сознательно: сайт
+     остаётся одним файлом без внешних запросов, а адрес менять
+     нельзя — почему, объяснено в скрипте у scrollToSection.      */
+  /* hidden сам по себе слабее .case: display в правиле ниже его
+     перебивает, и слой остался бы в потоке. Возвращаем силу. */
+  .case[hidden] { display: none; }
+
+  .case {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: grid;
+    place-items: center;
+    padding: clamp(0px, 3vw, 40px);
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.4s var(--ease), visibility 0s linear 0.4s;
+  }
+  .case[data-open="true"] {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity 0.4s var(--ease), visibility 0s;
+  }
+  .case-veil {
+    position: absolute;
+    inset: 0;
+    background: rgba(6, 7, 8, 0.78);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .case-panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(1060px, 100%);
+    max-height: 100dvh;
+    background: var(--void);
+    border: 1px solid var(--void-edge);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 40px 120px rgba(0, 0, 0, 0.7);
+    transform: translateY(16px) scale(0.985);
+    transition: transform 0.45s var(--ease);
+  }
+  .case[data-open="true"] .case-panel { transform: none; }
+
+  /* На телефоне слой занимает экран целиком: скруглённая карточка
+     в 3 миллиметрах от края там читается как ошибка вёрстки, а
+     каждый отданный краю пиксель — это строка текста кейса.      */
+  @media (max-width: 720px) {
+    .case { padding: 0; }
+    .case-panel { border: 0; border-radius: 0; height: 100dvh; }
+  }
+
+  /* Кнопка лежит поверх прокрутки: кадр кейса светлый сверху, и
+     без собственной подложки крестик на нём терялся.             */
+  .case-close {
+    position: absolute;
+    top: 14px; right: 14px;
+    z-index: 3;
+    width: 44px; height: 44px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--void-edge);
+    border-radius: 999px;
+    background: rgba(8, 9, 10, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: var(--chalk-soft);
+    cursor: pointer;
+    transition: color 0.3s var(--ease), border-color 0.3s var(--ease),
+                background 0.3s var(--ease);
+  }
+  .case-close svg { display: block; }
+  .case-close:hover {
+    color: var(--chalk);
+    border-color: var(--steel);
+    background: rgba(91, 147, 189, 0.14);
+  }
+
+  .case-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .case-grid {
+    display: grid;
+    /* Колонка рассказа шире колонки кадра: читают здесь текст, а
+       кадр — заглушка, ему хватает и меньшего. */
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    gap: clamp(24px, 3.4vw, 44px);
+    padding: clamp(22px, 3.4vw, 44px);
+    padding-top: clamp(22px, 3.4vw, 40px);
+  }
+  /* Ниже этой ширины колонка текста ужимается до десятка знаков в
+     строку — кадр и рассказ встают друг под друга.               */
+  @media (max-width: 900px) {
+    .case-grid { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .case-shot {
+    margin: 0;
+    /* кадр остаётся на виду, пока справа листается длинный текст.
+       Отступ сверху не декоративный: колонка кадра вдвое короче
+       колонки текста, и прижатый к верхнему краю кадр оставлял
+       под собой пустоту в пол-панели. Со сдвигом пустое место
+       делится надвое и читается как поле, а не как обрыв.      */
+    position: sticky;
+    top: clamp(0px, 4vh, 40px);
+    align-self: start;
+  }
+  @media (max-width: 900px) { .case-shot { position: static; } }
+
+  .case-shot img {
+    display: block;
+    width: 100%;
+    /* размеры кадра проставлены в разметке, чтобы место под него
+       было занято ещё до загрузки; здесь возвращаем ему
+       пропорциональную высоту */
+    height: auto;
+    border-radius: 10px;
+    border: 1px solid var(--void-edge);
+    background: var(--void-lift);
+  }
+  .case-shot figcaption {
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    color: var(--chalk-faint);
+    /* прямая оговорка: кадр рисует код, это не снимок экрана */
+  }
+
+  .case-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+    color: var(--steel);
+  }
+  .case-eyebrow i {
+    font-style: normal;
+    color: var(--chalk-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .case-body h3 {
+    margin: 0 0 12px;
+    font-size: clamp(24px, 3.4vw, 34px);
+    font-weight: 700;
+    letter-spacing: var(--track-head);
+    line-height: 1.12;
+    /* заголовок кейса встаёт вплотную к правому краю панели, если
+       не придержать длину строки */
+    max-width: 20ch;
+  }
+  .case-lede {
+    margin: 0 0 26px;
+    font-size: 16.5px;
+    line-height: 1.55;
+    color: var(--chalk-soft);
+    max-width: 46ch;
+  }
+
+  /* Паспорт работы. Три поля, на которые смотрят раньше текста:
+     когда, в какой роли, за сколько.                             */
+  .case-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 1px;
+    margin: 0 0 30px;
+    background: var(--void-edge);
+    border: 1px solid var(--void-edge);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .case-meta > div {
+    background: var(--void);
+    padding: 13px 15px 15px;
+  }
+  .case-meta dt {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+    color: var(--chalk-faint);
+    margin-bottom: 7px;
+  }
+  .case-meta dd {
+    margin: 0;
+    font-size: 14.5px;
+    color: var(--chalk);
+    line-height: 1.3;
+  }
+
+  .case-part { margin-bottom: 28px; }
+  .case-part h4 {
+    margin: 0 0 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--steel-edge);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+    color: var(--steel);
+  }
+  .case-part p {
+    margin: 0;
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: var(--chalk-soft);
+  }
+  .case-part ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+  .case-part li {
+    position: relative;
+    padding-left: 20px;
+    font-size: 15.5px;
+    line-height: 1.55;
+    color: var(--chalk-soft);
+  }
+  /* маркер — та же акцентная черта, что и в остальных списках,
+     а не типографская точка: она на чёрном почти не видна */
+  .case-part li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.68em;
+    width: 9px;
+    height: 1px;
+    background: var(--steel);
+  }
+
+  /* Результат — единственное место на странице с крупной цифрой.
+     Она и должна перебивать всё вокруг: за ней сюда и пришли.   */
+  .case-nums {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+    gap: 12px;
+  }
+  .case-num {
+    padding: 16px 16px 18px;
+    border: 1px solid var(--void-edge);
+    border-radius: 4px;
+    background: var(--steel-wash);
+  }
+  .case-num b {
+    display: block;
+    /* «1 таблица» ломалось после цифры и читалось как две разные
+       строки; балансировка держит короткое число со своим словом */
+    text-wrap: balance;
+    font-size: clamp(22px, 2.6vw, 27px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--chalk);
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+  }
+  .case-num span {
+    display: block;
+    margin-top: 8px;
+    font-size: 13.5px;
+    line-height: 1.4;
+    color: var(--chalk-soft);
+  }
+
+  /* Кейс дочитан — дальше либо писать, либо смотреть следующий.
+     Оба выхода стоят здесь, чтобы не искать их прокруткой.      */
+  .case-cta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 30px;
+    padding-top: 26px;
+    border-top: 1px solid var(--void-edge);
+  }
+  .case-cta .btn-quiet { min-height: 46px; }
+
+  /* Подвал панели закреплён: переход к соседней работе не должен
+     требовать прокрутки обратно наверх.                          */
+  .case-foot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px clamp(16px, 3vw, 28px);
+    border-top: 1px solid var(--void-edge);
+    background: rgba(8, 9, 10, 0.92);
+  }
+  .case-foot .deck-count { margin: 0 6px; text-align: center; }
+  /* название соседней работы прямо на кнопке: так понятно, куда
+     ведёт стрелка, ещё до нажатия */
+  .case-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 44px;
+    max-width: 40%;
+    padding: 0 16px;
+    border: 1px solid var(--void-edge);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--chalk-soft);
+    font-family: inherit;
+    font-size: 13.5px;
+    cursor: pointer;
+    transition: color 0.3s var(--ease), border-color 0.3s var(--ease),
+                background 0.3s var(--ease);
+  }
+  .case-step svg { display: block; flex: none; color: var(--steel-glow); }
+  .case-step b {
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .case-step:hover {
+    color: var(--chalk);
+    border-color: var(--steel);
+    background: var(--steel-wash);
+  }
+  @media (max-width: 560px) {
+    /* в подвале остаются стрелки и счётчик: названия работ в две
+       кнопки на такой ширине не помещаются и переносятся в три
+       строки, разрывая подвал */
+    .case-step b { display: none; }
+    .case-step { padding: 0; width: 44px; justify-content: center; }
+  }
+
+  html.case-open, html.case-open body { overflow: hidden; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .case, .case-panel { transition: none; }
+  }
+
   /* ── органы управления ────────────────────────────────────── */
   .deck-controls {
     display: flex;
@@ -1678,7 +2072,7 @@
   <div class="shell">
     <p class="eyebrow rise">02 — Портфолио</p>
     <h2 class="rise">Работы</h2>
-    <p class="band-note rise d1">Листайте вбок: мышью, свайпом или стрелками на клавиатуре.</p>
+    <p class="band-note rise d1">Листайте вбок — мышью, свайпом или стрелками. Нажмите на карточку в центре: откроется кейс с задачей, решением и результатом.</p>
   </div>
 
   <!-- tabindex делает саму карусель остановкой для Tab: иначе
@@ -1688,7 +2082,7 @@
        role="group"
        tabindex="0"
        aria-roledescription="карусель"
-       aria-label="Примеры работ: листайте стрелками влево и вправо">
+       aria-label="Примеры работ: листайте стрелками влево и вправо, Enter открывает кейс">
     <div class="deck-stage"></div>
 
     <!-- Подпись под заголовком уже описывает жест словами, поэтому
@@ -1722,6 +2116,54 @@
     </div>
   </div>
 </section>
+
+<!-- РАЗДЕЛ: КЕЙС РАБОТЫ
+     Слой поверх страницы, открывается кликом по центральной карточке
+     карусели. Содержимое целиком собирает скрипт из того же массива
+     WORKS — здесь только оболочка, кадр и подвал с переходами.
+     hidden снимает скрипт: без него слой лежал бы в разметке
+     доступным для Tab ещё до того, как его открыли. -->
+<div class="case" id="case" data-open="false" hidden
+     role="dialog" aria-modal="true" aria-labelledby="case-title">
+  <div class="case-veil" data-case="close"></div>
+
+  <div class="case-panel">
+    <button class="case-close" data-case="close" type="button" aria-label="Закрыть кейс">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+        <path d="M3 3l9 9M12 3l-9 9" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round"/>
+      </svg>
+    </button>
+
+    <div class="case-scroll" data-case="scroll">
+      <div class="case-grid">
+        <figure class="case-shot">
+          <img data-case="shot" width="960" height="720" alt="" aria-hidden="true" decoding="async">
+          <figcaption data-case="caption"></figcaption>
+        </figure>
+        <div class="case-body" data-case="body"></div>
+      </div>
+    </div>
+
+    <div class="case-foot">
+      <button class="case-step" data-case="prev" type="button">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <b data-step-title="prev"></b>
+      </button>
+      <p class="deck-count" data-case="count" aria-live="polite"></p>
+      <button class="case-step" data-case="next" type="button">
+        <b data-step-title="next"></b>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- РАЗДЕЛ: СТЕК -->
 <section class="band" id="stack">
@@ -2155,53 +2597,185 @@
     })();
 
     /* ══ РАБОТЫ В КАРУСЕЛИ ═══════════════════════════════════
-       Отсюда карусель берёт карточки. Порядок в массиве —
-       порядок на экране, первая работа открыта по умолчанию.
+       Отсюда карусель берёт карточки, отсюда же собирается кейс,
+       который открывается по клику. Порядок в массиве — порядок
+       на экране, первая работа открыта по умолчанию.
 
-       title — заголовок под карточкой
-       note  — строка-описание
-       tags  — подписи-плашки, как в блоке услуг
-       shot  — картинка: "data:image/jpeg;base64,…" либо путь к
-               файлу рядом со страницей. Пустая строка = карточку
-               нарисует код (временная заглушка).
-       url   — куда вести по клику. Пока пусто — клик просто
-               выводит карточку в центр. Впишешь адрес (например
-               "works/landing.html") и карточка станет ссылкой.   */
+       ВНИМАНИЕ: тексты и цифры ниже — образцы структуры, а не
+       отчёт по реальным проектам. Прежде чем показывать сайт
+       заказчику, заменить на свои: выдуманная метрика на первом
+       же уточняющем вопросе стоит дороже, чем её отсутствие.
+
+       ── что видно на карточке ──────────────────────────────
+       title  заголовок под карточкой
+       note   строка-описание, две строки максимум
+       tags   подписи-плашки, как в блоке услуг
+       shot   картинка: "data:image/jpeg;base64,…" либо путь к
+              файлу рядом со страницей. Пустая строка = кадр
+              нарисует код по ключу kind (временная заглушка).
+       kind   какой макет рисовать заглушкой: landing, cards,
+              bot, catalog, data, quiz. Незнакомое значение —
+              рисуется нейтральный макет.
+
+       ── что видно в кейсе ──────────────────────────────────
+       year   год, role — роль, term — срок работы
+       task   задача клиента, один абзац
+       did    список: что было сделано, по пунктам
+       result список цифр: n — само число, of — что оно значит
+       stack  инструменты, плашками
+       live   живая ссылка, если работу можно открыть:
+              { href: "https://…", label: "Открыть сайт" }.
+              Нет ссылки — кнопки просто не будет.              */
     var WORKS = [
       {
-        title: "Лендинг под запись",
-        note: "Одна страница, одно действие: форма записи и быстрый ответ в Telegram.",
-        tags: ["HTML5 · CSS3", "JavaScript", "Деплой · VPS"],
+        kind: "landing",
+        title: "Лендинг студии массажа",
+        note: "Одна страница, одно действие: запись в два касания и заявка сразу в Telegram.",
+        tags: ["HTML5 · CSS3", "JavaScript", "Telegram Bot API"],
+        year: "2025",
+        role: "Дизайн и вёрстка",
+        term: "6 дней",
+        task: "У студии была страница в соцсети и переписка в личных сообщениях: заявки терялись между сменами, а на «сколько стоит» администратор отвечал по сто раз в день. Нужна была страница, которая доводит до записи без разговора.",
+        did: [
+          "Свёл структуру к одному действию: цена и длительность видны сразу, кнопка записи закреплена внизу экрана телефона.",
+          "Сократил форму до четырёх полей вместо девяти — остальное уточняем уже в переписке, а не до неё.",
+          "Подключил отправку в Telegram: заявка приходит в чат смены с именем, услугой и удобным временем.",
+          "Верстал от телефона: восемь из десяти переходов приходят из соцсети, десктоп здесь — второй экран.",
+          "Собрал страницу одним файлом без внешних запросов — открывается на мобильном интернете и в метро."
+        ],
+        result: [
+          { n: "1,4 с", of: "полная загрузка на 4G, вес меньше 300 КБ" },
+          { n: "4 поля", of: "в форме записи вместо прежних девяти" },
+          { n: "×2", of: "заявок в неделю против старой страницы" }
+        ],
+        stack: ["HTML5, CSS3", "JavaScript без библиотек", "Telegram Bot API", "VPS, HTTPS"],
         shot: "",
-        url: ""
+        live: null
       },
       {
-        title: "Карточки для Ozon",
-        note: "Комплект инфографики под требования площадки, читаемый с телефона.",
+        kind: "cards",
+        title: "Карточки для Ozon и WB",
+        note: "Комплект инфографики под требования площадок: читается с телефона, не режется в галерее.",
         tags: ["Инфографика", "Подготовка фото", "Ozon · WB"],
+        year: "2025",
+        role: "Дизайн, подготовка фото",
+        term: "4 дня",
+        task: "Товар терялся в выдаче: фотографии сняты на телефон, подписи мелкие, а по первому кадру нельзя было понять, что вообще продаётся и в каком размере. Нужен был комплект сразу под две площадки с разными требованиями к полям и пропорциям.",
+        did: [
+          "Разобрал требования Ozon и Wildberries и собрал сетку, которая работает в обеих: безопасные поля, один модуль отступов.",
+          "Первый кадр отвечает ровно на два вопроса — что это и какого размера. Всё остальное уехало на следующие кадры.",
+          "Кегль подписей проверял на телефоне в ленте выдачи, а не в макете: там карточка занимает четверть экрана.",
+          "Подготовил съёмку: выравнивание белого, чистка фона, одинаковые тени по всей серии.",
+          "Отдал исходники послойно — цену и состав заказчик меняет сам, без новой оплаты."
+        ],
+        result: [
+          { n: "2 площадки", of: "один комплект, два набора форматов" },
+          { n: "7 кадров", of: "в галерее вместо двух фотографий" },
+          { n: "14 пт", of: "минимальный кегль, читаемый с телефона" }
+        ],
+        stack: ["Инфографика", "Подготовка фото", "Требования Ozon и WB", "Исходники в слоях"],
         shot: "",
-        url: ""
+        live: null
       },
       {
+        kind: "bot",
         title: "Бот приёма заявок",
-        note: "Заявки из чата собираются в таблицу, ответственный получает уведомление.",
+        note: "Заявки из чата сами ложатся в таблицу, ответственный получает уведомление.",
         tags: ["Node.js", "Telegram Bot API", "Google Sheets API"],
+        year: "2024",
+        role: "Разработка и деплой",
+        term: "9 дней",
+        task: "Заявки приходили в общий чат и тонули в переписке. Никто не знал, кто взял клиента и взял ли вообще, а в конце месяца отчёт было не из чего собрать — только листать историю сообщений.",
+        did: [
+          "Диалог из пяти шагов с проверкой телефона и возвратом назад: ошибся на третьем шаге — не начинаешь заново.",
+          "Каждая заявка уходит строкой в Google Sheets: время, контакт, услуга, источник.",
+          "Ответственный получает уведомление и забирает заявку кнопкой — в чате сразу видно, кто уже в работе.",
+          "Обрыв сети не теряет заявку: неотправленное копится в очереди на диске и уходит при первой возможности.",
+          "Развернул на VPS под systemd — с автоперезапуском, логами и ротацией."
+        ],
+        result: [
+          { n: "5 шагов", of: "от первого сообщения до строки в таблице" },
+          { n: "< 3 с", of: "от заявки до уведомления ответственному" },
+          { n: "1 таблица", of: "вместо переписки в трёх разных чатах" }
+        ],
+        stack: ["Node.js", "Telegram Bot API", "Google Sheets API", "VPS, systemd"],
         shot: "",
-        url: ""
+        live: null
       },
       {
-        title: "Витрина каталога",
-        note: "Каталог с фильтрами и корзиной, вёрстка под телефон и десктоп.",
+        kind: "catalog",
+        title: "Витрина каталога мебели",
+        note: "340 позиций с фильтрами и подбором: выдача перестраивается без перезагрузки.",
         tags: ["Адаптивная вёрстка", "JavaScript", "Tilda"],
+        year: "2024",
+        role: "Вёрстка и фронтенд",
+        term: "3 недели",
+        task: "Каталог жил в PDF-прайсе на сорок страниц. На вопрос «а есть в сером?» менеджер листал файл вручную и отвечал через час — к этому времени половина клиентов уже смотрела в другом месте.",
+        did: [
+          "Фильтры по типу, размеру и цвету считаются на клиенте: выдача перестраивается мгновенно, без обращения к серверу.",
+          "Список на 340 позиций рисуется частями по мере прокрутки — страница не подвисает на слабом телефоне.",
+          "Подбор собирается в корзину и уходит менеджеру одним сообщением: позиции, количество, сумма.",
+          "Состояние фильтров живёт в адресе страницы — готовый подбор можно переслать ссылкой.",
+          "Все товары лежат в одном JSON: обновление прайса не требует правки вёрстки."
+        ],
+        result: [
+          { n: "340", of: "позиций в каталоге, поиск без сервера" },
+          { n: "0", of: "перезагрузок страницы при подборе" },
+          { n: "1 ссылка", of: "чтобы переслать клиенту готовый подбор" }
+        ],
+        stack: ["Адаптивная вёрстка", "JavaScript", "JSON как источник данных", "Tilda Zero Block"],
         shot: "",
-        url: ""
+        live: null
       },
       {
-        title: "Парсер цен",
-        note: "Сбор цен конкурентов по расписанию, выгрузка в таблицу и сводка за день.",
-        tags: ["Python", "Парсинг данных", "Планировщики задач"],
+        kind: "data",
+        title: "Парсер цен конкурентов",
+        note: "Сбор по расписанию, утренняя сводка и сигнал, когда кто-то ушёл ниже нас.",
+        tags: ["Python", "Парсинг данных", "Планировщик задач"],
+        year: "2025",
+        role: "Разработка",
+        term: "8 дней",
+        task: "Цены у пяти конкурентов сверяли руками раз в неделю: час работы и всё равно с опозданием. Между сверками успевали неделю продавать по устаревшему прайсу — иногда себе в убыток.",
+        did: [
+          "Сбор с пяти площадок по расписанию, с паузами и повторами: нагрузка ровная, блокировок нет.",
+          "Собранное сводится к одной номенклатуре — у каждой площадки свои названия для одного и того же товара.",
+          "Утренняя сводка в Telegram: что подорожало, что подешевело, где мы дороже рынка.",
+          "История хранится в базе — видно динамику за квартал, а не только срез на сегодня.",
+          "Упавшая площадка не роняет сбор: она отмечается в отчёте, остальные собираются как обычно."
+        ],
+        result: [
+          { n: "5 площадок", of: "в одном отчёте каждое утро" },
+          { n: "1 час → 0", of: "ручной сверки цен в неделю" },
+          { n: "90 дней", of: "истории цен для динамики" }
+        ],
+        stack: ["Python", "requests, BeautifulSoup", "SQLite", "cron, Telegram"],
         shot: "",
-        url: ""
+        live: null
+      },
+      {
+        kind: "quiz",
+        title: "Квиз-калькулятор ремонта",
+        note: "Шесть вопросов вместо разговора: клиент уходит с вилкой цены, менеджер — с брифом.",
+        tags: ["UX-сценарий", "JavaScript", "Расчёт на клиенте"],
+        year: "2025",
+        role: "UX, дизайн, вёрстка",
+        term: "10 дней",
+        task: "Первым вопросом всегда было «сколько стоит», а честный ответ требовал десятка уточнений. Разговор съедал время обеих сторон и чаще всего заканчивался ничем — клиент уходил, так и не узнав цену.",
+        did: [
+          "Шесть шагов, на каждом один вопрос и видимый прогресс: короткий путь держит доходимость до конца.",
+          "Вилка цены пересчитывается на каждом шаге — сразу видно, что именно и насколько меняет ответ.",
+          "Контакты спрашиваем последними, когда расчёт уже на экране: до этого форма только мешала бы.",
+          "Ответы уходят менеджеру готовым брифом, а не набором цифр — перезванивать за уточнениями не нужно.",
+          "Шаг назад не сбрасывает введённое: передумать можно, потерять ответы — нет."
+        ],
+        result: [
+          { n: "6 шагов", of: "вместо десяти уточнений в переписке" },
+          { n: "~40 с", of: "средний проход до вилки цены" },
+          { n: "Бриф", of: "вместо «здравствуйте, а сколько стоит»" }
+        ],
+        stack: ["HTML5, CSS3", "JavaScript", "Расчёт на клиенте", "Telegram и почта"],
+        shot: "",
+        live: null
       }
     ];
 
@@ -2447,11 +3021,249 @@
       if (!deckEl || !stage || !WORKS.length) return;
 
       /* ── заглушка вместо снимка ──────────────────────────────
-         Пока своей картинки нет, рисуем абстрактную композицию:
-         намёк на макет из прямоугольников и мягкий боковой свет.
-         Как только в WORKS появится shot, сюда уже не зайдём.    */
-      function makeShot(seed) {
-        var W = 480, H = 360;
+         Пока своих снимков нет, кадр рисует код. Раньше здесь
+         лежала одна абстрактная композиция на все работы, и это
+         был худший вариант из возможных: шесть одинаковых пятен
+         читаются как «показывать нечего». Теперь макет рисуется
+         по типу работы — лендинг узнаётся по шапке и кнопке, бот
+         по репликам, отчёт по таблице и графику. Кадр остаётся
+         честной заглушкой, и кейс прямо говорит об этом подписью
+         под ним.
+
+         Как только в WORKS появится shot, сюда уже не зайдём.   */
+
+      /* белила и акцент в одной прозрачности — чтобы не собирать
+         строку rgba руками в каждой второй строке макета */
+      function ink(a) { return "rgba(236,234,228," + a + ")"; }
+      function acc(a) { return "rgba(91,147,189," + a + ")"; }
+
+      /* прямоугольник со скруглением: roundRect есть не везде,
+         поэтому углы строим дугами сами */
+      function box(ctx, x, y, w, h, r, color) {
+        var rad = Math.min(r, w / 2, h / 2);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x + rad, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rad);
+        ctx.arcTo(x + w, y + h, x, y + h, rad);
+        ctx.arcTo(x, y + h, x, y, rad);
+        ctx.arcTo(x, y, x + w, y, rad);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      function ring(ctx, x, y, r, color, width) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      function disc(ctx, x, y, r, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      /* Макеты. Все координаты — доли ширины и высоты кадра,
+         поэтому один и тот же рисунок годится и для карточки,
+         и для крупного кадра в кейсе.                          */
+      var SHOTS = {
+        /* лендинг: шапка, заголовок, кнопка, кадр, три блока */
+        landing: function (ctx, W, H, rand) {
+          box(ctx, W * 0.07, H * 0.08, W * 0.13, H * 0.03, 3, ink(0.13));
+          for (var i = 0; i < 3; i++) {
+            box(ctx, W * (0.60 + i * 0.11), H * 0.085, W * 0.08, H * 0.02, 2, ink(0.07));
+          }
+          box(ctx, W * 0.07, H * 0.20, W * 0.44, H * 0.055, 3, ink(0.14));
+          box(ctx, W * 0.07, H * 0.285, W * 0.33, H * 0.04, 3, ink(0.10));
+          box(ctx, W * 0.07, H * 0.365, W * 0.38, H * 0.022, 2, ink(0.05));
+          box(ctx, W * 0.07, H * 0.415, W * 0.30, H * 0.022, 2, ink(0.05));
+          /* кнопка — единственное цветное пятно, как на самой странице */
+          box(ctx, W * 0.07, H * 0.49, W * 0.20, H * 0.075, 40, acc(0.55));
+          box(ctx, W * 0.56, H * 0.18, W * 0.37, H * 0.42, 8, ink(0.07));
+          disc(ctx, W * 0.745, H * 0.39, H * 0.055, ink(0.10));
+          for (var c = 0; c < 3; c++) {
+            var x = W * (0.07 + c * 0.30);
+            box(ctx, x, H * 0.70, W * 0.26, H * 0.19, 6, ink(0.045));
+            box(ctx, x + W * 0.02, H * 0.745, W * 0.10, H * 0.022, 2, acc(0.34));
+            box(ctx, x + W * 0.02, H * 0.795, W * 0.20, H * 0.018, 2, ink(0.06));
+            box(ctx, x + W * 0.02, H * 0.83, W * 0.15, H * 0.018, 2, ink(0.045));
+          }
+        },
+
+        /* карточки маркетплейса: три товара в ряд, у первого плашка */
+        cards: function (ctx, W, H, rand) {
+          box(ctx, W * 0.07, H * 0.06, W * 0.24, H * 0.028, 2, ink(0.09));
+          for (var i = 0; i < 3; i++) {
+            var x = W * (0.07 + i * 0.30);
+            var w = W * 0.26;
+            box(ctx, x, H * 0.15, w, H * 0.70, 8, ink(0.06));
+            box(ctx, x + w * 0.08, H * 0.19, w * 0.84, H * 0.32, 5, ink(0.10));
+            disc(ctx, x + w * 0.5, H * 0.35, H * 0.075, ink(0.13));
+            box(ctx, x + w * 0.08, H * 0.55, w * 0.76, H * 0.035, 2, ink(0.11));
+            box(ctx, x + w * 0.08, H * 0.615, w * 0.52, H * 0.025, 2, ink(0.06));
+            box(ctx, x + w * 0.08, H * 0.70, w * 0.44, H * 0.055, 3, acc(0.5));
+            /* плашка «хит» на первом товаре: в выдаче она и есть
+               главный различитель между соседними карточками */
+            if (i === 0) box(ctx, x + w * 0.52, H * 0.175, w * 0.40, H * 0.045, 3, acc(0.62));
+          }
+        },
+
+        /* бот: шапка чата, реплики, кнопки ответа, поле ввода */
+        bot: function (ctx, W, H, rand) {
+          box(ctx, 0, 0, W, H * 0.10, 0, ink(0.06));
+          disc(ctx, W * 0.09, H * 0.05, H * 0.032, acc(0.45));
+          box(ctx, W * 0.15, H * 0.035, W * 0.22, H * 0.022, 2, ink(0.11));
+          box(ctx, W * 0.15, H * 0.068, W * 0.13, H * 0.016, 2, ink(0.05));
+
+          var rows = [
+            { side: 0, w: 0.46, h: 0.10 },
+            { side: 1, w: 0.34, h: 0.075 },
+            { side: 0, w: 0.52, h: 0.115 },
+            { side: 1, w: 0.28, h: 0.075 }
+          ];
+          var y = H * 0.16;
+          rows.forEach(function (r) {
+            var w = W * r.w;
+            var h = H * r.h;
+            var x = r.side ? W * 0.93 - w : W * 0.07;
+            box(ctx, x, y, w, h, 10, r.side ? acc(0.36) : ink(0.07));
+            /* строки текста внутри реплики */
+            box(ctx, x + w * 0.09, y + h * 0.27, w * 0.7, h * 0.14, 2, ink(r.side ? 0.16 : 0.10));
+            box(ctx, x + w * 0.09, y + h * 0.55, w * 0.46, h * 0.14, 2, ink(r.side ? 0.12 : 0.07));
+            y += h + H * 0.035;
+          });
+
+          /* кнопки быстрого ответа — то, чем диалог и держится */
+          box(ctx, W * 0.07, H * 0.755, W * 0.24, H * 0.055, 30, acc(0.22));
+          box(ctx, W * 0.335, H * 0.755, W * 0.20, H * 0.055, 30, acc(0.22));
+
+          box(ctx, W * 0.07, H * 0.865, W * 0.72, H * 0.075, 30, ink(0.055));
+          box(ctx, W * 0.11, H * 0.893, W * 0.22, H * 0.02, 2, ink(0.06));
+          disc(ctx, W * 0.87, H * 0.9025, H * 0.037, acc(0.55));
+        },
+
+        /* витрина: поиск, колонка фильтров, сетка товаров, корзина */
+        catalog: function (ctx, W, H, rand) {
+          box(ctx, W * 0.06, H * 0.05, W * 0.42, H * 0.06, 30, ink(0.06));
+          box(ctx, W * 0.10, H * 0.071, W * 0.16, H * 0.018, 2, ink(0.07));
+          box(ctx, W * 0.79, H * 0.05, W * 0.15, H * 0.06, 30, acc(0.5));
+
+          box(ctx, W * 0.06, H * 0.17, W * 0.21, H * 0.72, 6, ink(0.045));
+          box(ctx, W * 0.09, H * 0.21, W * 0.12, H * 0.022, 2, acc(0.4));
+          for (var r = 0; r < 5; r++) {
+            var y = H * (0.28 + r * 0.09);
+            /* один фильтр отмечен — иначе колонка читается пустым списком */
+            box(ctx, W * 0.09, y, W * 0.022, H * 0.03, 2, r === 1 ? acc(0.6) : ink(0.09));
+            box(ctx, W * 0.125, y + H * 0.006, W * (0.09 + rand() * 0.05), H * 0.018, 2, ink(0.06));
+          }
+
+          for (var i = 0; i < 6; i++) {
+            var cx = W * (0.31 + (i % 3) * 0.225);
+            var cy = H * (0.17 + Math.floor(i / 3) * 0.375);
+            box(ctx, cx, cy, W * 0.195, H * 0.335, 6, ink(0.065));
+            box(ctx, cx + W * 0.015, cy + H * 0.03, W * 0.165, H * 0.19, 4, ink(0.10));
+            box(ctx, cx + W * 0.015, cy + H * 0.245, W * 0.13, H * 0.024, 2, ink(0.08));
+            box(ctx, cx + W * 0.015, cy + H * 0.285, W * 0.07, H * 0.028, 2, acc(0.45));
+          }
+        },
+
+        /* отчёт: график динамики и таблица под ним */
+        data: function (ctx, W, H, rand) {
+          box(ctx, W * 0.07, H * 0.06, W * 0.26, H * 0.03, 2, ink(0.10));
+          box(ctx, W * 0.78, H * 0.06, W * 0.15, H * 0.03, 3, acc(0.4));
+          box(ctx, W * 0.07, H * 0.14, W * 0.86, H * 0.34, 6, ink(0.035));
+
+          var x0 = W * 0.10, x1 = W * 0.90;
+          var yTop = H * 0.19, yBot = H * 0.43;
+          var pts = [], i;
+          for (i = 0; i <= 11; i++) {
+            pts.push({
+              x: x0 + (x1 - x0) * (i / 11),
+              y: yBot - (yBot - yTop) * (0.25 + rand() * 0.6)
+            });
+          }
+
+          /* заливка под линией: без неё график читается царапиной */
+          var g = ctx.createLinearGradient(0, yTop, 0, yBot);
+          g.addColorStop(0, "rgba(91,147,189,0.22)");
+          g.addColorStop(1, "rgba(91,147,189,0)");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, yBot);
+          for (i = 0; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+          ctx.lineTo(pts[pts.length - 1].x, yBot);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.strokeStyle = "rgba(140,192,228,0.85)";
+          ctx.lineWidth = Math.max(1.4, W * 0.004);
+          ctx.lineJoin = "round";
+          ctx.beginPath();
+          for (i = 0; i < pts.length; i++) {
+            if (i) ctx.lineTo(pts[i].x, pts[i].y); else ctx.moveTo(pts[i].x, pts[i].y);
+          }
+          ctx.stroke();
+          /* вторая линия — мы на фоне рынка */
+          ctx.strokeStyle = "rgba(236,234,228,0.2)";
+          ctx.lineWidth = Math.max(1, W * 0.0025);
+          ctx.beginPath();
+          for (i = 0; i < pts.length; i++) {
+            var yy = pts[i].y + (yBot - yTop) * 0.22;
+            if (i) ctx.lineTo(pts[i].x, yy); else ctx.moveTo(pts[i].x, yy);
+          }
+          ctx.stroke();
+          disc(ctx, pts[11].x, pts[11].y, Math.max(2.5, W * 0.007), "rgba(140,192,228,0.95)");
+
+          box(ctx, W * 0.07, H * 0.55, W * 0.86, H * 0.045, 3, ink(0.08));
+          for (var r2 = 0; r2 < 4; r2++) {
+            var y = H * (0.62 + r2 * 0.085);
+            box(ctx, W * 0.07, y, W * 0.30, H * 0.022, 2, ink(0.07));
+            box(ctx, W * 0.44, y, W * 0.14, H * 0.022, 2, ink(0.05));
+            box(ctx, W * 0.64, y, W * 0.12, H * 0.022, 2, ink(0.05));
+            /* колонка изменения цены — единственное, ради чего
+               этот отчёт открывают */
+            box(ctx, W * 0.82, y - H * 0.008, W * 0.11, H * 0.038, 3,
+                r2 % 2 ? acc(0.42) : ink(0.06));
+          }
+        },
+
+        /* квиз: прогресс, вопрос, варианты, кнопка «дальше» */
+        quiz: function (ctx, W, H, rand) {
+          box(ctx, W * 0.10, H * 0.09, W * 0.80, H * 0.014, 20, ink(0.07));
+          box(ctx, W * 0.10, H * 0.09, W * 0.80 * 0.55, H * 0.014, 20, acc(0.65));
+          box(ctx, W * 0.10, H * 0.135, W * 0.14, H * 0.02, 2, ink(0.06));
+
+          box(ctx, W * 0.10, H * 0.20, W * 0.54, H * 0.05, 3, ink(0.13));
+          box(ctx, W * 0.10, H * 0.275, W * 0.34, H * 0.026, 2, ink(0.06));
+
+          for (var i = 0; i < 4; i++) {
+            var y = H * (0.36 + i * 0.125);
+            var chosen = i === 1;
+            box(ctx, W * 0.10, y, W * 0.80, H * 0.095, 6, chosen ? acc(0.16) : ink(0.05));
+            if (chosen) {
+              ctx.save();
+              ctx.strokeStyle = "rgba(91,147,189,0.6)";
+              ctx.lineWidth = Math.max(1, W * 0.0025);
+              ctx.strokeRect(W * 0.10, y, W * 0.80, H * 0.095);
+              ctx.restore();
+            }
+            var cy = y + H * 0.0475;
+            ring(ctx, W * 0.145, cy, H * 0.022, chosen ? acc(0.75) : ink(0.14),
+                 Math.max(1, W * 0.0025));
+            if (chosen) disc(ctx, W * 0.145, cy, H * 0.011, acc(0.85));
+            box(ctx, W * 0.19, cy - H * 0.011, W * (0.24 + rand() * 0.16), H * 0.022, 2,
+                ink(chosen ? 0.13 : 0.08));
+          }
+
+          box(ctx, W * 0.71, H * 0.87, W * 0.19, H * 0.075, 30, acc(0.55));
+        }
+      };
+
+      function makeShot(kind, seed, W, H) {
         var cv = document.createElement("canvas");
         cv.width = W;
         cv.height = H;
@@ -2462,28 +3274,42 @@
 
         ctx.fillStyle = "#0b0d0f";
         ctx.fillRect(0, 0, W, H);
-        bloom(ctx, W * (0.2 + rand() * 0.6), H * 0.3, W * 0.5, 0.2, "150,196,228");
-        bloom(ctx, W * (0.3 + rand() * 0.5), H * 0.8, W * 0.42, 0.12, "236,234,228");
+        /* свет держим слева сверху во всех кадрах: рядом в карусели
+           разнобой по направлению света выглядел бы монтажом */
+        bloom(ctx, W * 0.28, H * 0.18, W * 0.62, 0.16, "150,196,228");
+        bloom(ctx, W * 0.82, H * 0.86, W * 0.5, 0.09, "236,234,228");
 
-        /* блоки условного макета: шапка, крупный кадр, строки */
-        ctx.fillStyle = "rgba(236,234,228,0.09)";
-        ctx.fillRect(W * 0.1, H * 0.14, W * 0.34, H * 0.05);
-        ctx.fillStyle = "rgba(236,234,228,0.055)";
-        ctx.fillRect(W * 0.1, H * 0.27, W * 0.8, H * 0.3);
-        for (var i = 0; i < 3; i++) {
-          ctx.fillStyle = "rgba(236,234,228," + (0.05 - i * 0.012).toFixed(3) + ")";
-          ctx.fillRect(W * 0.1, H * (0.65 + i * 0.08), W * (0.62 - rand() * 0.3), H * 0.035);
-        }
-        ctx.fillStyle = "rgba(91,147,189,0.5)";
-        ctx.fillRect(W * 0.1, H * 0.86, W * 0.16, H * 0.045);
+        (SHOTS[kind] || SHOTS.landing)(ctx, W, H, rand);
 
         var vg = ctx.createLinearGradient(0, 0, 0, H);
         vg.addColorStop(0, "rgba(5,6,7,0)");
+        vg.addColorStop(0.55, "rgba(5,6,7,0.12)");
         vg.addColorStop(1, "rgba(5,6,7,0.6)");
         ctx.fillStyle = vg;
         ctx.fillRect(0, 0, W, H);
 
-        return cv.toDataURL("image/jpeg", 0.72);
+        return cv.toDataURL("image/jpeg", 0.78);
+      }
+
+      /* стрелка вправо для подписи-приглашения; svg собираем
+         через createElementNS, иначе браузер разберёт разметку
+         как html и значок не появится */
+      function arrowSvg() {
+        var NS = "http://www.w3.org/2000/svg";
+        var svg = document.createElementNS(NS, "svg");
+        svg.setAttribute("width", "13");
+        svg.setAttribute("height", "13");
+        svg.setAttribute("viewBox", "0 0 16 16");
+        svg.setAttribute("fill", "none");
+        svg.setAttribute("aria-hidden", "true");
+        var path = document.createElementNS(NS, "path");
+        path.setAttribute("d", "M3 8h9M8 4l4.5 4L8 12");
+        path.setAttribute("stroke", "currentColor");
+        path.setAttribute("stroke-width", "1.5");
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("stroke-linejoin", "round");
+        svg.appendChild(path);
+        return svg;
       }
 
       /* ── сборка карточек ─────────────────────────────────── */
@@ -2491,21 +3317,21 @@
         var card = document.createElement("a");
         card.className = "deck-card";
 
-        /* с адресом это настоящая ссылка — её и клавиатура, и
-           контекстное меню браузера понимают сами. Без адреса
-           роль честнее описать кнопкой: пока клик только
-           выводит карточку в центр.                            */
-        if (work.url) {
-          card.href = work.url;
-        } else {
-          card.setAttribute("role", "button");
-          card.setAttribute("tabindex", "0");
-        }
+        /* Карточка ведёт не на отдельную страницу, а в слой с
+           кейсом на этой же — адрес не меняется (почему так,
+           объяснено у scrollToSection). Значит это не ссылка:
+           href="#…" здесь перехватывается внешним роутером, а
+           ссылка без адреса — обещание, которого браузер не
+           выполнит. Роль кнопки описывает происходящее честно,
+           клавиатурную активацию возвращаем ниже вручную.      */
+        card.setAttribute("role", "button");
+        card.setAttribute("tabindex", "0");
+        card.setAttribute("aria-haspopup", "dialog");
 
         var shot = document.createElement("div");
         shot.className = "shot";
         var img = document.createElement("img");
-        img.src = work.shot || makeShot(i + 1);
+        img.src = work.shot || makeShot(work.kind, i + 1, 480, 360);
         /* подпись под карточкой уже сообщает название, поэтому
            картинку для диктора помечаем декоративной            */
         img.alt = "";
@@ -2534,6 +3360,16 @@
           });
           note.appendChild(chips);
         }
+
+        /* Строка «смотреть кейс» — единственное на карточке, что
+           говорит о клике словами. Курсор-палец виден только под
+           мышью, а больше половины посетителей приходит с
+           телефона.                                             */
+        var open = document.createElement("span");
+        open.className = "card-open";
+        open.appendChild(document.createTextNode("Смотреть кейс"));
+        open.appendChild(arrowSvg());
+        note.appendChild(open);
 
         card.appendChild(shot);
         card.appendChild(note);
@@ -2765,14 +3601,15 @@
         else if (e.key === "End") { e.preventDefault(); goTo(n - 1); }
       });
 
-      /* карточка без адреса — кнопка, ей нужно вернуть Enter и
-         пробел вручную, как и остальным ссылкам на странице    */
+      /* карточка — кнопка, ей нужно вернуть Enter и пробел
+         вручную, как и остальным ссылкам на странице          */
       cards.forEach(function (card, i) {
         card.addEventListener("keydown", function (e) {
-          if (card.hasAttribute("href")) return;
           if (e.key !== "Enter" && e.key !== " ") return;
           e.preventDefault();
-          goTo(i);
+          /* с клавиатуры карточка всегда в центре — фокус сам её
+             туда выводит, — так что открываем кейс сразу */
+          openCase(i);
         });
 
         /* пришли табом на дальнюю карточку — выводим её в центр,
@@ -2784,15 +3621,16 @@
         card.addEventListener("click", function (e) {
           /* тащили полотно — это был жест, а не клик по карточке */
           if (moved) { e.preventDefault(); return; }
+          e.preventDefault();
+          e.stopPropagation();
           if (i !== norm(index)) {
             /* первый клик по боковой карточке только подводит её
                к центру: открывать вслепую то, что толком не видно,
                пользователь не просил                              */
-            e.preventDefault();
-            e.stopPropagation();
             goTo(i);
+            return;
           }
-          /* центральная карточка со ссылкой уходит по адресу сама */
+          openCase(i);
         });
       });
 
@@ -2957,6 +3795,256 @@
           layout();
         });
       }, { passive: true });
+
+      /* ══ КЕЙС РАБОТЫ ═══════════════════════════════════════
+         Слой поверх страницы. Собирается из той же работы, что
+         и карточка, поэтому добавленная в WORKS запись сразу
+         получает и кадр в карусели, и разворот с рассказом —
+         дописывать нечего.                                     */
+      var caseEl = document.getElementById("case");
+      var casePanel = caseEl && caseEl.querySelector(".case-panel");
+      var caseBody = caseEl && caseEl.querySelector('[data-case="body"]');
+      var caseShot = caseEl && caseEl.querySelector('[data-case="shot"]');
+      var caseCap = caseEl && caseEl.querySelector('[data-case="caption"]');
+      var caseScroll = caseEl && caseEl.querySelector('[data-case="scroll"]');
+      var caseCount = caseEl && caseEl.querySelector('[data-case="count"]');
+      var caseIndex = 0;
+      var backTo = null;   /* куда вернуть фокус после закрытия */
+
+      /* Крупный кадр рисуем вдвое подробнее карточного: в панели
+         он занимает половину ширины экрана, и растянутая
+         картинка с карточки читалась бы мылом. Считаем по
+         требованию и запоминаем — рисовать все шесть заранее
+         значит задержать первую отрисовку страницы ради того,
+         что могут и не открыть.                               */
+      var heroCache = [];
+      function heroShot(i) {
+        if (WORKS[i].shot) return WORKS[i].shot;
+        if (!heroCache[i]) heroCache[i] = makeShot(WORKS[i].kind, i + 1, 960, 720);
+        return heroCache[i];
+      }
+
+      function el(tag, cls, text) {
+        var node = document.createElement(tag);
+        if (cls) node.className = cls;
+        if (text != null) node.textContent = text;
+        return node;
+      }
+
+      /* заголовок раздела внутри кейса плюс его содержимое */
+      function part(head, content) {
+        var box = el("section", "case-part");
+        box.appendChild(el("h4", null, head));
+        box.appendChild(content);
+        return box;
+      }
+
+      function list(items) {
+        var ul = document.createElement("ul");
+        items.forEach(function (t) { ul.appendChild(el("li", null, t)); });
+        return ul;
+      }
+
+      function chipRow(items) {
+        var row = el("div", "chips");
+        items.forEach(function (t) { row.appendChild(el("span", "chip", t)); });
+        return row;
+      }
+
+      function renderCase(i) {
+        var work = WORKS[i];
+        if (!caseBody) return;
+
+        caseShot.src = heroShot(i);
+        /* Прямая оговорка про кадр. Выдавать нарисованную схему
+           за снимок работы — ровно тот сорт мелкой неправды,
+           который замечают первым.                             */
+        caseCap.textContent = work.shot
+          ? ""
+          : "Кадр собран кодом: схема экрана, а не снимок работы.";
+
+        caseBody.innerHTML = "";
+
+        var eyebrow = el("p", "case-eyebrow");
+        eyebrow.appendChild(document.createTextNode("Кейс"));
+        eyebrow.appendChild(el("i", null, pad(i + 1) + " / " + pad(n)));
+        caseBody.appendChild(eyebrow);
+
+        var h3 = el("h3", null, work.title);
+        h3.id = "case-title";
+        caseBody.appendChild(h3);
+        caseBody.appendChild(el("p", "case-lede", work.note));
+
+        var meta = el("dl", "case-meta");
+        [["Год", work.year], ["Роль", work.role], ["Срок", work.term]]
+          .forEach(function (pair) {
+            if (!pair[1]) return;
+            var cell = document.createElement("div");
+            cell.appendChild(el("dt", null, pair[0]));
+            cell.appendChild(el("dd", null, pair[1]));
+            meta.appendChild(cell);
+          });
+        if (meta.children.length) caseBody.appendChild(meta);
+
+        if (work.task) caseBody.appendChild(part("Задача", el("p", null, work.task)));
+        if (work.did && work.did.length) {
+          caseBody.appendChild(part("Что сделал", list(work.did)));
+        }
+
+        if (work.result && work.result.length) {
+          var nums = el("div", "case-nums");
+          work.result.forEach(function (r) {
+            var cell = el("div", "case-num");
+            cell.appendChild(el("b", null, r.n));
+            cell.appendChild(el("span", null, r.of));
+            nums.appendChild(cell);
+          });
+          caseBody.appendChild(part("Результат", nums));
+        }
+
+        if (work.stack && work.stack.length) {
+          caseBody.appendChild(part("Инструменты", chipRow(work.stack)));
+        }
+
+        /* Кейс дочитан — дальше либо писать, либо смотреть
+           следующую работу. Обе двери ставим здесь, чтобы за
+           ними не пришлось возвращаться прокруткой.           */
+        var cta = el("div", "case-cta");
+        var talk = el("button", "btn-quiet", "Обсудить похожую задачу");
+        talk.type = "button";
+        talk.appendChild(arrowSvg());
+        talk.addEventListener("click", function () {
+          closeCase(true);
+          scrollToSection("contact");
+        });
+        cta.appendChild(talk);
+
+        if (work.live && work.live.href) {
+          var live = el("a", "btn-quiet", work.live.label || "Открыть работу");
+          live.href = work.live.href;
+          live.target = "_blank";
+          live.rel = "noopener noreferrer";
+          live.appendChild(arrowSvg());
+          cta.appendChild(live);
+        }
+        caseBody.appendChild(cta);
+
+        /* подвал: куда ведут стрелки */
+        var prevWork = WORKS[norm(i - 1)];
+        var nextWork = WORKS[norm(i + 1)];
+        var prevTitle = caseEl.querySelector('[data-step-title="prev"]');
+        var nextTitle = caseEl.querySelector('[data-step-title="next"]');
+        if (prevTitle) prevTitle.textContent = prevWork.title;
+        if (nextTitle) nextTitle.textContent = nextWork.title;
+        var prevStep = caseEl.querySelector('[data-case="prev"]');
+        var nextStep = caseEl.querySelector('[data-case="next"]');
+        if (prevStep) prevStep.setAttribute("aria-label", "Предыдущая работа: " + prevWork.title);
+        if (nextStep) nextStep.setAttribute("aria-label", "Следующая работа: " + nextWork.title);
+
+        if (caseCount) {
+          caseCount.innerHTML = "";
+          var b = document.createElement("b");
+          b.textContent = pad(i + 1);
+          caseCount.appendChild(b);
+          caseCount.appendChild(document.createTextNode(" / " + pad(n)));
+        }
+      }
+
+      function caseOpen() {
+        return !!caseEl && caseEl.getAttribute("data-open") === "true";
+      }
+
+      function openCase(i) {
+        if (!caseEl) return;
+        used();
+        caseIndex = norm(i);
+        backTo = document.activeElement;
+        renderCase(caseIndex);
+
+        caseEl.hidden = false;
+        /* Слой только что перестал быть hidden, и без принудительного
+           пересчёта браузер сложил бы снятие hidden и смену data-open
+           в один кадр — переход открытия пропал бы. */
+        void caseEl.offsetHeight;
+        caseEl.setAttribute("data-open", "true");
+        document.documentElement.classList.add("case-open");
+        if (caseScroll) caseScroll.scrollTop = 0;
+
+        var close = caseEl.querySelector(".case-close");
+        if (close) close.focus();
+      }
+
+      function closeCase(silent) {
+        if (!caseEl || !caseOpen()) return;
+        caseEl.setAttribute("data-open", "false");
+        document.documentElement.classList.remove("case-open");
+
+        /* Прячем слой от Tab только после того, как он доехал:
+           снять его из потока сразу — значит оборвать анимацию
+           закрытия на первом кадре.                            */
+        window.setTimeout(function () {
+          if (!caseOpen()) caseEl.hidden = true;
+        }, slow ? 0 : 420);
+
+        /* Возврат фокуса на карточку, с которой ушли. Уходим по
+           кнопке «обсудить» — фокус нужен разделу контактов, там
+           его поставит scrollToSection.                        */
+        if (!silent) {
+          var card = cards[norm(caseIndex)];
+          if (card) card.focus({ preventScroll: true });
+          else if (backTo && backTo.focus) backTo.focus();
+        }
+        backTo = null;
+      }
+
+      /* Соседняя работа без закрытия слоя. Карусель под ним
+         доводим до той же карточки: закрыв кейс, человек должен
+         увидеть в центре ровно то, что читал.                  */
+      function stepCase(delta) {
+        caseIndex = norm(caseIndex + delta);
+        renderCase(caseIndex);
+        if (caseScroll) caseScroll.scrollTop = 0;
+        goTo(caseIndex);
+      }
+
+      if (caseEl) {
+        caseEl.addEventListener("click", function (e) {
+          var hit = e.target.closest ? e.target.closest("[data-case]") : null;
+          if (!hit) return;
+          var what = hit.getAttribute("data-case");
+          if (what === "close") closeCase();
+          else if (what === "prev") stepCase(-1);
+          else if (what === "next") stepCase(1);
+        });
+
+        document.addEventListener("keydown", function (e) {
+          if (!caseOpen()) return;
+
+          if (e.key === "Escape") { e.preventDefault(); closeCase(); return; }
+          if (e.key === "ArrowLeft") { e.preventDefault(); stepCase(-1); return; }
+          if (e.key === "ArrowRight") { e.preventDefault(); stepCase(1); return; }
+          if (e.key !== "Tab" || !casePanel) return;
+
+          /* Табуляция не должна уходить на страницу под слоем:
+             она закрыта затемнением, и «слепой» проход по ней —
+             обычная причина, по которой с клавиатуры из такого
+             окна невозможно выбраться.                         */
+          var stops = [].slice.call(
+            casePanel.querySelectorAll("a[href], button:not(:disabled)")
+          ).filter(function (node) { return node.offsetParent !== null; });
+          if (!stops.length) return;
+
+          var first = stops[0];
+          var last = stops[stops.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        });
+      }
 
       syncControls();
       measure();
