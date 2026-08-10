@@ -3,7 +3,75 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>D.PUCHENKOV — разработка и дизайн</title>
+<title>D.PUCHENKOV — Telegram-боты, карточки для маркетплейсов и лендинги</title>
+
+<!-- Флаг ставится до отрисовки страницы: всё, что прячется ради
+     анимации появления, прячется ТОЛЬКО под ним. Без скрипта класса
+     не будет, и страница покажет всё содержимое сразу — иначе
+     посетитель, робот поисковика и бот превью в мессенджере видели
+     бы чёрный экран с одной шапкой. Отдельным файлом скрипт делать
+     нельзя: он обязан выполниться раньше первого кадра. -->
+<script>document.documentElement.className += " js";</script>
+
+<!-- ─── КАК ССЫЛКА ВЫГЛЯДИТ СНАРУЖИ ───────────────────────────────
+     Портфолио живёт в пересылках: скинул в личку, в чат биржи, в
+     отклик. Без этих строк ссылка приходила голой строкой без
+     заголовка, описания и картинки — рядом с конкурентом, у
+     которого превью есть, это проигрыш ещё до открытия.
+
+     ПОСЛЕ ПРИВЯЗКИ ДОМЕНА: раскомментировать og:url и canonical и
+     подставить адрес. Картинке og:image тоже нужен полный адрес
+     вида https://ваш-домен/og.png — относительный путь читают не
+     все боты. -->
+<meta name="description" content="Телеграм-боты, карточки товаров для маркетплейсов и лендинги. Беру задачу целиком: от постановки до запуска на боевом сервере. Срок и цену называю до начала работы, отвечаю в течение дня.">
+<meta name="author" content="D.PUCHENKOV">
+
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:site_name" content="D.PUCHENKOV">
+<meta property="og:title" content="D.PUCHENKOV — боты, карточки для маркетплейсов, лендинги">
+<meta property="og:description" content="Беру задачу целиком: от постановки до запуска на боевом сервере. Срок и цену называю до начала работы.">
+<meta property="og:image" content="og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="D.PUCHENKOV — разработка и дизайн">
+<!-- <meta property="og:url" content="https://ВАШ-ДОМЕН/"> -->
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="D.PUCHENKOV — боты, карточки для маркетплейсов, лендинги">
+<meta name="twitter:description" content="Беру задачу целиком: от постановки до запуска на боевом сервере.">
+<meta name="twitter:image" content="og.jpg">
+
+<!-- <link rel="canonical" href="https://ВАШ-ДОМЕН/"> -->
+
+<!-- Значок вкладки нарисован прямо здесь: внешний файл добавил бы
+     сайту запрос, которых у него сейчас ноль. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2308090a'/%3E%3Ctext x='32' y='44' font-family='system-ui,sans-serif' font-size='34' font-weight='700' fill='%23eceae4' text-anchor='middle'%3ED%3C/text%3E%3Ccircle cx='47' cy='40' r='3.4' fill='%235b93bd'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#08090a">
+<meta name="color-scheme" content="dark">
+
+<!-- Что это за страница — словами, понятными поиску -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ProfessionalService",
+  "name": "D.PUCHENKOV",
+  "description": "Разработка Telegram-ботов и автоматизации, карточки товаров для маркетплейсов, лендинги и сайты.",
+  "areaServed": "RU",
+  "availableLanguage": "ru",
+  "sameAs": ["https://t.me/gothY1L"],
+  "knowsAbout": [
+    "Telegram Bot API", "Node.js", "Python", "JavaScript",
+    "Инфографика для маркетплейсов", "Ozon", "Wildberries",
+    "Лендинги", "Адаптивная вёрстка", "Парсинг данных"
+  ],
+  "makesOffer": [
+    { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Телеграм-боты и автоматизация" } },
+    { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Карточки товаров для маркетплейсов" } },
+    { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Лендинги и сайты" } }
+  ]
+}
+</script>
 
 <!--
   ════════════════════════════════════════════════════════════════
@@ -66,6 +134,39 @@
 -->
 
 <style>
+  /* ─── ПЕЧАТЬ ──────────────────────────────────────────────────
+     Портфолио иногда сохраняют в PDF, чтобы приложить к отклику.
+     На бумаге тёмная тема — залитый чёрным лист, поэтому для
+     печати разворачиваем цвета и убираем весь декор.            */
+  @media print {
+    :root { --void: #fff; --chalk: #111; --chalk-soft: #444; --chalk-faint: #666; }
+    html, body { background: #fff !important; color: #111 !important; }
+    .plate-wrap, .scanlines, .grain, .deck-cue, .nav-burger,
+    .menu, .case, .deck-controls, .skip { display: none !important; }
+    .nav { position: static; }
+    .rise, .lift, .ln > i { opacity: 1 !important; transform: none !important; filter: none !important; }
+    .band { padding: 24px 0 !important; page-break-inside: avoid; }
+    /* Карусель на бумаге листать нечем: раскладываем работы
+       столбиком, чтобы в PDF попали все шесть, а не одна. */
+    .deck { overflow: visible !important; perspective: none !important; }
+    .deck-stage { height: auto !important; display: grid; gap: 28px; }
+    .deck-card {
+      position: static !important;
+      width: 100% !important;
+      margin: 0 !important;
+      transform: none !important;
+      opacity: 1 !important;
+      page-break-inside: avoid;
+    }
+    .card-note { opacity: 1 !important; transform: none !important; }
+    .card-open { display: none !important; }
+    .shot { box-shadow: none !important; }
+    h1 { font-size: 34px !important; }
+    h2 { font-size: 24px !important; }
+    /* адрес ссылки на бумаге не виден — дописываем его текстом */
+    a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 11px; color: #666; }
+  }
+
   /* ─── ТОКЕНЫ ─────────────────────────────────────────────── */
   :root {
     --void:        #08090a;
@@ -133,6 +234,36 @@
 
   ::selection { background: var(--steel-haze); color: var(--chalk); }
 
+  /* Ссылка «к содержимому»: не видна, пока на неё не встал фокус. */
+  .skip {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 200;
+    padding: 12px 20px;
+    background: var(--chalk);
+    color: var(--void);
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 0 0 8px 0;
+  }
+  .skip:focus { left: 0; }
+
+  /* Раздел работ рисует скрипт. Если его нет, показываем список
+     словами — иначе на месте портфолио остаётся пустое место. */
+  .nojs {
+    max-width: 720px;
+    margin: 40px auto 0;
+    padding: 24px 26px 26px;
+    border: 1px solid var(--void-edge);
+    border-radius: 6px;
+    background: var(--void-lift);
+  }
+  .nojs p { margin: 0 0 18px; color: var(--chalk-soft); font-size: 15px; }
+  .nojs ul { margin: 0; padding-left: 18px; display: grid; gap: 10px; }
+  .nojs li { color: var(--chalk-soft); font-size: 15px; }
+  .nojs b { color: var(--chalk); font-weight: 600; }
+
   :focus-visible {
     outline: 2px solid var(--steel-glow);
     outline-offset: 4px;
@@ -149,6 +280,7 @@
     overflow: hidden;
     pointer-events: none;
   }
+  .js .plate { opacity: 0; }
   .plate {
     position: absolute;
     inset: -14%;
@@ -159,7 +291,7 @@
        здесь только стартовое состояние на случай, если скрипт ещё
        не успел отработать, и никаких CSS-transition — они бы спорили
        с покадровым инлайн-стилем и давали рывки.                 */
-    opacity: 0;
+    opacity: 0.4;
     scale: 1.28;
     translate: 0 16%;
     will-change: opacity, scale, translate;
@@ -547,13 +679,14 @@
   }
   .kicker::before {
     content: "";
-    width: 0;
+    width: 44px;
     height: 1px;
     background: var(--steel);
     display: block;
     transition: width 1.6s var(--ease) 0.5s;
   }
-  .loaded .kicker::before { width: 44px; }
+  .js .kicker::before { width: 0; }
+  .js.loaded .kicker::before { width: 44px; }
 
   /* заголовок: каждая строка выезжает из-под маски */
   h1 {
@@ -567,6 +700,8 @@
   .ln > i {
     display: block;
     font-style: normal;
+  }
+  .js .ln > i {
     transform: translateY(110%);
     transition: transform 1.5s var(--ease);
   }
@@ -742,7 +877,7 @@
   }
 
   /* появление блоков героя по загрузке страницы */
-  .lift {
+  .js .lift {
     opacity: 0;
     transform: translateY(34px);
     filter: blur(10px);
@@ -887,6 +1022,29 @@
     transition: color 0.5s var(--ease), border-color 0.5s var(--ease);
   }
   .job:hover .chip { color: var(--chalk-soft); border-color: var(--steel-edge); }
+
+  /* Строка фактов о работе: те же ячейки, что в паспорте кейса, —
+     на странице уже есть эта форма подачи, второй заводить незачем. */
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    margin: clamp(30px, 4vw, 44px) 0 0;
+    background: var(--void-edge);
+    border: 1px solid var(--void-edge);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .facts > div { background: rgba(8, 9, 10, 0.86); padding: 15px 18px 17px; }
+  .facts dt {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+    color: var(--steel);
+    margin-bottom: 8px;
+  }
+  .facts dd { margin: 0; font-size: 14.5px; line-height: 1.35; color: var(--chalk); }
 
   /* ─── ПРИГЛАШЕНИЕ В КОНЦЕ РАЗДЕЛА ────────────────────────────
      Дочитав список услуг, человек уже понял, его это задача или
@@ -1803,7 +1961,7 @@
   /* ─── ПОЯВЛЕНИЕ ПРИ СКРОЛЛЕ ──────────────────────────────────
      Класс .in навешивает Intersection Observer (код внизу файла),
      дальше всё доигрывает CSS-переход. Один раз на элемент.        */
-  .rise {
+  .js .rise {
     opacity: 0;
     transform: translateY(64px) scale(0.97);
     filter: blur(14px);
@@ -1813,7 +1971,7 @@
       filter var(--slow) var(--ease);
     will-change: opacity, transform, filter;
   }
-  .rise.in {
+  .js .rise.in {
     opacity: 1;
     transform: translateY(0) scale(1);
     filter: blur(0);
@@ -1898,14 +2056,18 @@
 </head>
 <body>
 
+<!-- С клавиатуры путь к содержимому лежал через всю навигацию, и так
+     на каждой странице обхода. Ссылка видна только под фокусом. -->
+<a class="skip" href="#top">Перейти к содержимому</a>
+
 <!-- РАЗДЕЛ: НАВИГАЦИЯ -->
 <nav class="nav">
-  <a class="wordmark" data-scroll="top" role="link" tabindex="0">D<i>.</i>PUCHENKOV</a>
+  <a class="wordmark" href="#top" data-scroll="top">D<i>.</i>PUCHENKOV</a>
   <div class="nav-links">
-    <a data-scroll="work" role="link" tabindex="0">Услуги</a>
-    <a data-scroll="works" role="link" tabindex="0">Работы</a>
-    <a data-scroll="stack" role="link" tabindex="0">Стек</a>
-    <a data-scroll="process" role="link" tabindex="0">Процесс</a>
+    <a href="#work" data-scroll="work">Услуги</a>
+    <a href="#works" data-scroll="works">Работы</a>
+    <a href="#stack" data-scroll="stack">Стек</a>
+    <a href="#process" data-scroll="process">Процесс</a>
     <a class="nav-contact" href="https://t.me/gothY1L" target="_blank" rel="noopener">Написать</a>
   </div>
 
@@ -1928,11 +2090,11 @@
   <div class="menu-panel" role="dialog" aria-modal="true" aria-label="Разделы сайта">
     <p class="menu-cap">Разделы</p>
     <nav class="menu-list">
-      <a data-scroll="work" role="link" tabindex="0"><b>01</b>Услуги</a>
-      <a data-scroll="works" role="link" tabindex="0"><b>02</b>Работы</a>
-      <a data-scroll="stack" role="link" tabindex="0"><b>03</b>Стек</a>
-      <a data-scroll="process" role="link" tabindex="0"><b>04</b>Процесс</a>
-      <a data-scroll="contact" role="link" tabindex="0"><b>05</b>Контакты</a>
+      <a href="#work" data-scroll="work"><b>01</b>Услуги</a>
+      <a href="#works" data-scroll="works"><b>02</b>Работы</a>
+      <a href="#stack" data-scroll="stack"><b>03</b>Стек</a>
+      <a href="#process" data-scroll="process"><b>04</b>Процесс</a>
+      <a href="#contact" data-scroll="contact"><b>05</b>Контакты</a>
     </nav>
     <a class="btn menu-btn" href="https://t.me/gothY1L" target="_blank" rel="noopener">
       Написать в Telegram
@@ -1948,6 +2110,8 @@
 </div>
 
 <!-- РАЗДЕЛ: ГЕРОЙ -->
+<main id="content">
+
 <section class="hero" id="top">
   <div class="plate-wrap">
     <!-- чтобы поставить свою фотографию: data-src="ссылка" -->
@@ -1975,7 +2139,7 @@
             </svg>
           </span>
         </a>
-        <a class="btn-quiet" data-scroll="process" role="link" tabindex="0">
+        <a class="btn-quiet" href="#process" data-scroll="process">
           Как идёт работа
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
             <path d="M6.5 2v8.5M3 7l3.5 3.5L10 7"
@@ -2055,7 +2219,7 @@
 
     <p class="ask rise d3">
       Похоже на вашу задачу?
-      <a class="ask-go" data-scroll="contact" role="link" tabindex="0">
+      <a class="ask-go" href="#contact" data-scroll="contact">
         Обсудить задачу
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
           <path d="M6.5 2v8.5M3 7l3.5 3.5L10 7"
@@ -2089,6 +2253,23 @@
 
     <!-- Подпись под заголовком уже описывает жест словами, поэтому
          для диктора плашка — повтор: прячем её от чтения вслух. -->
+    <noscript>
+      <!-- ВНИМАНИЕ: список продублирован руками. Добавили работу в
+           массив WORKS — допишите строку и сюда, иначе без скрипта
+           страница будет показывать устаревший перечень. -->
+      <div class="nojs">
+        <p>Карусель работ показывается со включённым JavaScript. Коротко о том, что в ней:</p>
+        <ul>
+          <li><b>Лендинг студии массажа</b> — одна страница, одно действие: запись в два касания и заявка сразу в Telegram.</li>
+          <li><b>Карточки для Ozon и WB</b> — комплект инфографики под требования площадок, читаемый с телефона.</li>
+          <li><b>Бот приёма заявок</b> — заявки из чата сами ложатся в таблицу, ответственный получает уведомление.</li>
+          <li><b>Витрина каталога мебели</b> — 340 позиций с фильтрами, выдача перестраивается без перезагрузки.</li>
+          <li><b>Парсер цен конкурентов</b> — сбор по расписанию, утренняя сводка и сигнал, когда кто-то ушёл ниже нас.</li>
+          <li><b>Квиз-калькулятор ремонта</b> — шесть вопросов вместо разговора: клиент уходит с вилкой цены, менеджер — с брифом.</li>
+        </ul>
+      </div>
+    </noscript>
+
     <p class="deck-cue" aria-hidden="true">
       <svg width="15" height="10" viewBox="0 0 15 10" fill="none">
         <path d="M4 1L1 5l3 4M11 1l3 4-3 4M1 5h13"
@@ -2182,7 +2363,7 @@
     <div class="stack-grid">
       <div class="cell">
         <div class="cell-inner rise">
-          <h4>Разработка</h4>
+          <h3>Разработка</h3>
           <ul>
             <li>JavaScript</li>
             <li>Node.js</li>
@@ -2194,7 +2375,7 @@
       </div>
       <div class="cell">
         <div class="cell-inner rise d1">
-          <h4>Боты и API</h4>
+          <h3>Боты и API</h3>
           <ul>
             <li>Telegram Bot API</li>
             <li>REST · Webhooks</li>
@@ -2206,7 +2387,7 @@
       </div>
       <div class="cell">
         <div class="cell-inner rise d2">
-          <h4>Графика</h4>
+          <h3>Графика</h3>
           <ul>
             <li>Инфографика</li>
             <li>Подготовка изображений</li>
@@ -2218,7 +2399,7 @@
       </div>
       <div class="cell">
         <div class="cell-inner rise d3">
-          <h4>Запуск</h4>
+          <h3>Запуск</h3>
           <ul>
             <li>VPS · Linux</li>
             <li>Домены и DNS</li>
@@ -2270,6 +2451,13 @@
     <p class="eyebrow rise">05 — Контакты</p>
     <h2 class="rise">Расскажите, <em>что нужно сделать</em></h2>
     <p class="rise d1">Напишите пару строк о задаче. Отвечу в течение дня и скажу честно, моя это работа или лучше поискать другого исполнителя.</p>
+
+    <!-- Строка фактов о работе. Собирается из ABOUT в скрипте: что
+         не заполнено — на страницу не выводится, пустая строка
+         убирает пункт целиком, а если пусты все — исчезает и сам
+         блок. Так на сайте не появится обещание, которого вы не
+         давали. -->
+    <dl class="facts rise d2" data-facts hidden></dl>
 
     <!-- Карточки Kwork и почты появляются, только когда в CHANNELS
          внизу файла вписан адрес. Пустое поле убирает карточку
@@ -2368,6 +2556,8 @@
   </div>
 </section>
 
+</main>
+
 <footer>
   <div class="shell foot">
     <span>D.PUCHENKOV · Разработка и дизайн</span>
@@ -2383,6 +2573,41 @@
     "use strict";
 
     var slow = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    /* ══ СЧЁТЧИК ПОСЕЩЕНИЙ ═══════════════════════════════════
+       Портфолио без счётчика нельзя улучшать — только переделывать
+       наугад: неизвестно, доходит ли кто-то до работ, открывают ли
+       кейсы, куда уходят.
+
+       Впишите номер счётчика Яндекс.Метрики — код подключится сам:
+         var METRIKA_ID = "12345678";
+       Пока строка пуста, ничего не грузится и сайт остаётся без
+       единого внешнего запроса. Учтите: включение счётчика — это
+       первый запрос наружу, и по закону о персональных данных
+       странице тогда понадобится политика обработки.           */
+    var METRIKA_ID = "";
+
+    if (METRIKA_ID) {
+      (function (m, e, t, r, i, k, a) {
+        m[i] = m[i] || function () { (m[i].a = m[i].a || []).push(arguments); };
+        m[i].l = 1 * new Date();
+        k = e.createElement(t); a = e.getElementsByTagName(t)[0];
+        k.async = 1; k.src = r; a.parentNode.insertBefore(k, a);
+      })(window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+      window.ym(METRIKA_ID, "init", {
+        clickmap: true,
+        trackLinks: true,
+        accurateTrackBounce: true,
+        webvisor: false
+      });
+    }
+
+    /* Событие отправляем только если счётчик включён. Открытый кейс —
+       главный признак интереса на этой странице: он отделяет тех,
+       кто пролистал работы, от тех, кто в них вчитался.         */
+    function track(name) {
+      if (METRIKA_ID && window.ym) window.ym(METRIKA_ID, "reachGoal", name);
+    }
 
     /* ── НАВИГАЦИЯ БЕЗ ИЗМЕНЕНИЯ АДРЕСА ──────────────────────────
        Обычный href="#work" меняет location.hash. Страница живёт
@@ -2415,15 +2640,30 @@
     var scrollLinks = Array.prototype.slice.call(document.querySelectorAll("[data-scroll]"));
 
     scrollLinks.forEach(function (link) {
-      link.addEventListener("click", function () {
-        scrollToSection(link.getAttribute("data-scroll"));
-      });
-      link.addEventListener("keydown", function (e) {
-        if (e.key !== "Enter" && e.key !== " ") return;
+      link.addEventListener("click", function (e) {
+        /* Средний клик и клик с Ctrl/Cmd — это просьба открыть в
+           новой вкладке. Не мешаем: у ссылки для того и есть адрес. */
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+        /* Дальше переход берём на себя. Нативный сменил бы хэш, а
+           внутри встроенного окна на claude.ai смена хэша
+           перехватывается внешним роутером — вместо прокрутки
+           открывается «forbidden». Прокрутку делаем сами, адрес не
+           трогаем, но href в разметке остаётся: работает средний
+           клик, контекстное меню, копирование ссылки на раздел, и
+           страница остаётся проходимой, даже если скрипт не
+           выполнится. */
         e.preventDefault();
         scrollToSection(link.getAttribute("data-scroll"));
       });
     });
+
+    /* Пришли по адресу вида …/#works — браузер прокрутит сам, но
+       рывком и до того, как разделы проявятся. Доводим плавно. */
+    (function openByHash() {
+      var id = (location.hash || "").replace("#", "");
+      if (!id || !document.getElementById(id)) return;
+      window.setTimeout(function () { scrollToSection(id); }, 60);
+    })();
 
     /* ── МЕНЮ НА УЗКОМ ЭКРАНЕ ────────────────────────────────────
        Панель лежит под шапкой, поэтому кнопка остаётся на виду и
@@ -2577,6 +2817,71 @@
        kwork — полный адрес профиля, например
                "https://kwork.ru/user/ваш-профиль"
        email — просто адрес, mailto: подставит код          */
+    /* ══ КАНАЛЫ СВЯЗИ ════════════════════════════════════════
+       Пустая строка убирает карточку со страницы целиком — ссылки
+       в никуда на сайте быть не должно. Сейчас обе пустые, и все
+       пять ссылок на странице ведут в один Telegram: человеку без
+       телеграма выйти на вас не через что.
+
+       Вписать так:
+         kwork: "https://kwork.ru/user/ваш-профиль",
+         email: "вы@почта.ру"
+       Карточки появятся сами, ничего больше править не нужно.   */
+    /* ══ ФАКТЫ О РАБОТЕ ══════════════════════════════════════
+       Заказчик решает не по списку технологий, а по ответам на
+       «кто это», «что будет после сдачи» и «как платить». Сейчас
+       на сайте таких ответов нет — эти поля их и закрывают.
+
+       Пустая строка = пункт не показывается. Заполните те, в
+       которых уверены; выдуманный факт здесь дороже пустого места,
+       потому что его проверят первым же вопросом.
+
+       Примеры значений:
+         status:  "Самозанятый, чек после оплаты"
+         since:   "В разработке с 2024 года"
+         edits:   "Две итерации правок входят в стоимость"
+         after:   "Месяц поддержки после запуска"
+         handover:"Исходники и доступы передаю вам"
+         where:   "Работаю удалённо, часовой пояс МСК"                */
+    var ABOUT = {
+      status: "",
+      since: "",
+      edits: "",
+      after: "",
+      handover: "",
+      where: ""
+    };
+
+    (function facts() {
+      var box = document.querySelector("[data-facts]");
+      if (!box) return;
+
+      var rows = [
+        ["Статус", ABOUT.status],
+        ["Опыт", ABOUT.since],
+        ["Правки", ABOUT.edits],
+        ["После запуска", ABOUT.after],
+        ["Передача", ABOUT.handover],
+        ["Формат", ABOUT.where]
+      ].filter(function (r) { return r[1]; });
+
+      /* Ни одного заполненного поля — блока быть не должно: пустая
+         рамка с заголовком выглядит хуже, чем её отсутствие. */
+      if (!rows.length) { box.remove(); return; }
+
+      rows.forEach(function (r) {
+        var cell = document.createElement("div");
+        var dt = document.createElement("dt");
+        dt.textContent = r[0];
+        var dd = document.createElement("dd");
+        dd.textContent = r[1];
+        cell.appendChild(dt);
+        cell.appendChild(dd);
+        box.appendChild(cell);
+      });
+      box.hidden = false;
+    })();
+
     var CHANNELS = {
       kwork: "",
       email: ""
@@ -2890,15 +3195,46 @@
       return cv.toDataURL("image/jpeg", 0.72);
     }
 
-    var plates = document.querySelectorAll(".plate");
-    plates.forEach(function (el, i) {
-      var kind = el.getAttribute("data-plate");
+    /* Фотографии вшиты в страницу строками base64 и вместе весят
+       больше полумегабайта. Раньше браузер декодировал все четыре
+       сразу при разборе скрипта — включая те, до которых половина
+       посетителей не долистывает, — и платил за это задержкой
+       первого экрана. Теперь фон получает только та секция, к
+       которой человек подошёл; кадр героя ставим сразу, он виден
+       без прокрутки.
 
+       Трафик это не экономит: файл всё равно один. Настоящая
+       экономия — вынести фотографии в отдельные .webp рядом со
+       страницей, но тогда сайт перестанет быть одним файлом,
+       работающим без сети. Размен сознательный.               */
+    var plates = Array.prototype.slice.call(document.querySelectorAll(".plate"));
+
+    function paintPlate(el, i) {
+      if (el.dataset.painted) return;
+      el.dataset.painted = "1";
       /* приоритет: своя ссылка → вшитое фото → рисованный фон */
-      var src = el.getAttribute("data-src") || PHOTOS[kind] || "";
-      if (!src) src = makePlate(kind, 1337 + i * 977);
+      var src = el.getAttribute("data-src") || PHOTOS[el.getAttribute("data-plate")] || "";
+      if (!src) src = makePlate(el.getAttribute("data-plate"), 1337 + i * 977);
       if (src) el.style.backgroundImage = 'url("' + src + '")';
-    });
+    }
+
+    if (!("IntersectionObserver" in window)) {
+      plates.forEach(paintPlate);
+    } else {
+      var plateEye = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          paintPlate(entry.target, plates.indexOf(entry.target));
+          plateEye.unobserve(entry.target);
+        });
+      }, { rootMargin: "400px 0px" });
+
+      plates.forEach(function (el, i) {
+        /* кадр первого экрана ждать нечего — он уже на виду */
+        if (el.closest(".hero")) paintPlate(el, i);
+        else plateEye.observe(el);
+      });
+    }
 
     /* ══ ДВИЖОК ПОЯВЛЕНИЯ ПРИ СКРОЛЛЕ ═══════════════════════════
        Раньше элемент один раз получал класс через IntersectionObserver
@@ -4417,6 +4753,7 @@
       function openCase(i) {
         if (!caseEl) return;
         used();
+        track("case_open");
         caseIndex = norm(i);
         backTo = document.activeElement;
         renderCase(caseIndex);
