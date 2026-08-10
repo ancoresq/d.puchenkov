@@ -3,6 +3,4 @@
 User-agent: *
 Allow: /
 
-# После привязки домена раскомментируйте и подставьте адрес —
-# без полного адреса файл карты сайта бесполезен.
-# Sitemap: https://ВАШ-ДОМЕН/sitemap.xml
+Sitemap: https://puchenkoff.ru/sitemap.xml
