@@ -48,11 +48,12 @@
       title  заголовок под карточкой
       note   строка описания
       tags   подписи-плашки
-      kind   какой макет рисует заглушка вместо снимка:
-             landing, cards, bot, catalog, data, quiz
+      kind   какой из готовых макетов рисовать вместо снимка:
+             landing, cards, bot, catalog, data, quiz.
+             Сами макеты живут в блоке SHEETS в скрипте.
       shot   картинка: строка base64 или путь к файлу рядом со
-             страницей. Пустые кавычки = кадр нарисует код,
-             это временная заглушка вместо снимка.
+             страницей. Пустые кавычки = кадр соберёт код по
+             ключу kind.
       year, role, term  паспорт работы в шапке кейса
       task   задача клиента, один абзац
       did    список: что сделано
@@ -1240,9 +1241,10 @@
 
   .case-grid {
     display: grid;
-    /* Колонка рассказа шире колонки кадра: читают здесь текст, а
-       кадр — заглушка, ему хватает и меньшего. */
-    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    /* Колонки поровну: кадр перестал быть схемой и держит в себе
+       мелкие детали работы — цены, состояния, подписи, — которым
+       нужна ширина, чтобы их вообще можно было разглядеть. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: clamp(24px, 3.4vw, 44px);
     padding: clamp(22px, 3.4vw, 44px);
     padding-top: clamp(22px, 3.4vw, 40px);
@@ -2612,10 +2614,11 @@
        tags   подписи-плашки, как в блоке услуг
        shot   картинка: "data:image/jpeg;base64,…" либо путь к
               файлу рядом со страницей. Пустая строка = кадр
-              нарисует код по ключу kind (временная заглушка).
-       kind   какой макет рисовать заглушкой: landing, cards,
-              bot, catalog, data, quiz. Незнакомое значение —
-              рисуется нейтральный макет.
+              соберёт код по ключу kind.
+       kind   какой из готовых макетов рисовать: landing, cards,
+              bot, catalog, data, quiz. Сами макеты живут в
+              блоке SHEETS ниже. Незнакомое значение —
+              рисуется макет лендинга.
 
        ── что видно в кейсе ──────────────────────────────────
        year   год, role — роль, term — срок работы
@@ -3020,275 +3023,745 @@
       var countEl = document.querySelector(".deck-count");
       if (!deckEl || !stage || !WORKS.length) return;
 
-      /* ── заглушка вместо снимка ──────────────────────────────
-         Пока своих снимков нет, кадр рисует код. Раньше здесь
-         лежала одна абстрактная композиция на все работы, и это
-         был худший вариант из возможных: шесть одинаковых пятен
-         читаются как «показывать нечего». Теперь макет рисуется
-         по типу работы — лендинг узнаётся по шапке и кнопке, бот
-         по репликам, отчёт по таблице и графику. Кадр остаётся
-         честной заглушкой, и кейс прямо говорит об этом подписью
-         под ним.
+      /* ── МАКЕТЫ РАБОТ ────────────────────────────────────────
+         Кадр каждой работы — не снимок экрана и не серый каркас,
+         а собранный здесь макет: настоящая типографика, цены,
+         кнопки, состояния. Рисуем вектором (SVG в data-адресе, без
+         единого внешнего запроса): холст один и тот же и для
+         карточки в карусели, и для крупного кадра в кейсе, а
+         текст остаётся резким на любом размере — растр на
+         полутора сотнях пикселей превращал подписи в грязь.
+
+         Шесть работ — шесть разных продуктов, и палитры у них
+         разные: одинаковые они выглядели бы страницами одного
+         сайта, а не портфолио. Собирает серию рама, а не цвет —
+         общий тёмный фон, одна дистанция, один верхний свет и
+         одна виньетка на всех. Приём выставочный: рама общая,
+         картины разные.
 
          Как только в WORKS появится shot, сюда уже не зайдём.   */
 
-      /* белила и акцент в одной прозрачности — чтобы не собирать
-         строку rgba руками в каждой второй строке макета */
-      function ink(a) { return "rgba(236,234,228," + a + ")"; }
-      function acc(a) { return "rgba(91,147,189," + a + ")"; }
+      var SHEET_W = 1200, SHEET_H = 900;
 
-      /* прямоугольник со скруглением: roundRect есть не везде,
-         поэтому углы строим дугами сами */
-      function box(ctx, x, y, w, h, r, color) {
-        var rad = Math.min(r, w / 2, h / 2);
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(x + rad, y);
-        ctx.arcTo(x + w, y, x + w, y + h, rad);
-        ctx.arcTo(x + w, y + h, x, y + h, rad);
-        ctx.arcTo(x, y + h, x, y, rad);
-        ctx.arcTo(x, y, x + w, y, rad);
-        ctx.closePath();
-        ctx.fill();
+      var FACE = "system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+      var MONO = "ui-monospace,'SF Mono','Cascadia Mono',Consolas,monospace";
+
+      function esc(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       }
 
-      function ring(ctx, x, y, r, color, width) {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.stroke();
+      /* прямоугольник: rx — скругление, остальное как в атрибутах */
+      function R(x, y, w, h, o) {
+        o = o || {};
+        return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '"'
+          + (o.rx ? ' rx="' + o.rx + '"' : "")
+          + ' fill="' + (o.fill || "none") + '"'
+          + (o.stroke ? ' stroke="' + o.stroke + '" stroke-width="' + (o.sw || 1) + '"' : "")
+          + (o.opacity != null ? ' opacity="' + o.opacity + '"' : "")
+          + (o.filter ? ' filter="url(#' + o.filter + ')"' : "")
+          + "/>";
       }
 
-      function disc(ctx, x, y, r, color) {
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
+      function T(x, y, str, o) {
+        o = o || {};
+        return '<text x="' + x + '" y="' + y + '"'
+          + ' font-family="' + (o.mono ? MONO : FACE) + '"'
+          + ' font-size="' + (o.size || 16) + '"'
+          + ' font-weight="' + (o.weight || 400) + '"'
+          + ' fill="' + (o.fill || "#101314") + '"'
+          + (o.anchor ? ' text-anchor="' + o.anchor + '"' : "")
+          + (o.track ? ' letter-spacing="' + o.track + '"' : "")
+          + (o.opacity != null ? ' opacity="' + o.opacity + '"' : "")
+          + (o.deco ? ' text-decoration="' + o.deco + '"' : "")
+          + ">" + esc(str) + "</text>";
       }
 
-      /* Макеты. Все координаты — доли ширины и высоты кадра,
-         поэтому один и тот же рисунок годится и для карточки,
-         и для крупного кадра в кейсе.                          */
-      var SHOTS = {
-        /* лендинг: шапка, заголовок, кнопка, кадр, три блока */
-        landing: function (ctx, W, H, rand) {
-          box(ctx, W * 0.07, H * 0.08, W * 0.13, H * 0.03, 3, ink(0.13));
-          for (var i = 0; i < 3; i++) {
-            box(ctx, W * (0.60 + i * 0.11), H * 0.085, W * 0.08, H * 0.02, 2, ink(0.07));
-          }
-          box(ctx, W * 0.07, H * 0.20, W * 0.44, H * 0.055, 3, ink(0.14));
-          box(ctx, W * 0.07, H * 0.285, W * 0.33, H * 0.04, 3, ink(0.10));
-          box(ctx, W * 0.07, H * 0.365, W * 0.38, H * 0.022, 2, ink(0.05));
-          box(ctx, W * 0.07, H * 0.415, W * 0.30, H * 0.022, 2, ink(0.05));
-          /* кнопка — единственное цветное пятно, как на самой странице */
-          box(ctx, W * 0.07, H * 0.49, W * 0.20, H * 0.075, 40, acc(0.55));
-          box(ctx, W * 0.56, H * 0.18, W * 0.37, H * 0.42, 8, ink(0.07));
-          disc(ctx, W * 0.745, H * 0.39, H * 0.055, ink(0.10));
-          for (var c = 0; c < 3; c++) {
-            var x = W * (0.07 + c * 0.30);
-            box(ctx, x, H * 0.70, W * 0.26, H * 0.19, 6, ink(0.045));
-            box(ctx, x + W * 0.02, H * 0.745, W * 0.10, H * 0.022, 2, acc(0.34));
-            box(ctx, x + W * 0.02, H * 0.795, W * 0.20, H * 0.018, 2, ink(0.06));
-            box(ctx, x + W * 0.02, H * 0.83, W * 0.15, H * 0.018, 2, ink(0.045));
-          }
-        },
+      function C(cx, cy, r, o) {
+        o = o || {};
+        return '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '"'
+          + ' fill="' + (o.fill || "none") + '"'
+          + (o.stroke ? ' stroke="' + o.stroke + '" stroke-width="' + (o.sw || 1) + '"' : "")
+          + (o.opacity != null ? ' opacity="' + o.opacity + '"' : "") + "/>";
+      }
 
-        /* карточки маркетплейса: три товара в ряд, у первого плашка */
-        cards: function (ctx, W, H, rand) {
-          box(ctx, W * 0.07, H * 0.06, W * 0.24, H * 0.028, 2, ink(0.09));
-          for (var i = 0; i < 3; i++) {
-            var x = W * (0.07 + i * 0.30);
-            var w = W * 0.26;
-            box(ctx, x, H * 0.15, w, H * 0.70, 8, ink(0.06));
-            box(ctx, x + w * 0.08, H * 0.19, w * 0.84, H * 0.32, 5, ink(0.10));
-            disc(ctx, x + w * 0.5, H * 0.35, H * 0.075, ink(0.13));
-            box(ctx, x + w * 0.08, H * 0.55, w * 0.76, H * 0.035, 2, ink(0.11));
-            box(ctx, x + w * 0.08, H * 0.615, w * 0.52, H * 0.025, 2, ink(0.06));
-            box(ctx, x + w * 0.08, H * 0.70, w * 0.44, H * 0.055, 3, acc(0.5));
-            /* плашка «хит» на первом товаре: в выдаче она и есть
-               главный различитель между соседними карточками */
-            if (i === 0) box(ctx, x + w * 0.52, H * 0.175, w * 0.40, H * 0.045, 3, acc(0.62));
-          }
-        },
+      function P(d, o) {
+        o = o || {};
+        return '<path d="' + d + '"'
+          + ' fill="' + (o.fill || "none") + '"'
+          + (o.stroke ? ' stroke="' + o.stroke + '" stroke-width="' + (o.sw || 2) + '"' : "")
+          + ' stroke-linecap="round" stroke-linejoin="round"'
+          + (o.opacity != null ? ' opacity="' + o.opacity + '"' : "") + "/>";
+      }
 
-        /* бот: шапка чата, реплики, кнопки ответа, поле ввода */
-        bot: function (ctx, W, H, rand) {
-          box(ctx, 0, 0, W, H * 0.10, 0, ink(0.06));
-          disc(ctx, W * 0.09, H * 0.05, H * 0.032, acc(0.45));
-          box(ctx, W * 0.15, H * 0.035, W * 0.22, H * 0.022, 2, ink(0.11));
-          box(ctx, W * 0.15, H * 0.068, W * 0.13, H * 0.016, 2, ink(0.05));
+      /* Строка текста, набранная блоками — ею заполняем абзацы,
+         которые на превью всё равно читаются текстурой, а не
+         словами. Честнее серых полос: у настоящего текста рваный
+         правый край и разная длина слов.                        */
+      function lines(x, y, w, count, o) {
+        o = o || {};
+        var step = o.step || 15;
+        var out = "";
+        var widths = [1, 0.94, 0.98, 0.86, 0.92, 0.72];
+        for (var i = 0; i < count; i++) {
+          out += R(x, y + i * step, w * widths[i % widths.length], o.h || 6,
+                   { rx: 3, fill: o.fill || "#101314", opacity: o.opacity != null ? o.opacity : 0.12 });
+        }
+        return out;
+      }
 
-          var rows = [
-            { side: 0, w: 0.46, h: 0.10 },
-            { side: 1, w: 0.34, h: 0.075 },
-            { side: 0, w: 0.52, h: 0.115 },
-            { side: 1, w: 0.28, h: 0.075 }
+      /* ── рамы, в которых показываем работу ─────────────────── */
+
+      /* окно браузера: тонкая рама, три точки, адресная строка */
+      function browser(x, y, w, h, id, addr, opt) {
+        opt = opt || {};
+        var bar = 46;
+        var chrome = opt.dark ? "#191d22" : "#e9e6e1";
+        var line = opt.dark ? "#252b32" : "#d8d3cc";
+        var addrBg = opt.dark ? "#11151a" : "#f7f5f2";
+        var addrInk = opt.dark ? "#6f7885" : "#8d8781";
+        return {
+          /* рама и шапка рисуются под содержимым */
+          frame: R(x, y, w, h, { rx: 14, fill: chrome, filter: "lift" })
+            + R(x, y + bar, w, h - bar, { fill: opt.bg || "#ffffff" })
+            + R(x + 0.5, y + 0.5, w - 1, h - 1, { rx: 14, stroke: line, sw: 1 })
+            + C(x + 26, y + 23, 5.5, { fill: opt.dark ? "#39414a" : "#cdc7bf" })
+            + C(x + 44, y + 23, 5.5, { fill: opt.dark ? "#39414a" : "#cdc7bf" })
+            + C(x + 62, y + 23, 5.5, { fill: opt.dark ? "#39414a" : "#cdc7bf" })
+            + R(x + 86, y + 12, w - 112, 22, { rx: 11, fill: addrBg })
+            + T(x + 100, y + 27, addr, { size: 12, fill: addrInk, mono: true }),
+          /* содержимое режем по скруглённому низу окна */
+          clip: '<clipPath id="' + id + '">' + R(x, y + bar, w, h - bar) + "</clipPath>",
+          x: x, y: y + bar, w: w, h: h - bar
+        };
+      }
+
+      /* телефон: корпус, экран, чёлка */
+      function phone(x, y, w, h, id, bg) {
+        var pad = 9;
+        return {
+          frame: R(x, y, w, h, { rx: 34, fill: "#1b1f24", filter: "lift" })
+            + R(x + 1.5, y + 1.5, w - 3, h - 3, { rx: 32.5, stroke: "#2e353d", sw: 2 })
+            + R(x + pad, y + pad, w - pad * 2, h - pad * 2, { rx: 26, fill: bg || "#ffffff" }),
+          notch: R(x + w / 2 - 34, y + pad + 7, 68, 9, { rx: 5, fill: "#1b1f24", opacity: 0.9 }),
+          clip: '<clipPath id="' + id + '">'
+            + R(x + pad, y + pad, w - pad * 2, h - pad * 2, { rx: 26 }) + "</clipPath>",
+          x: x + pad, y: y + pad, w: w - pad * 2, h: h - pad * 2
+        };
+      }
+
+      /* ── сами работы ───────────────────────────────────────── */
+      var SHEETS = {
+
+        /* 1. ЛЕНДИНГ СТУДИИ · тёплый свет, спокойная зелень.
+              Показываем связку «десктоп + телефон»: страницу делали
+              от телефона, и кадр должен об этом говорить.        */
+        landing: function () {
+          var ink = "#241f1b", mute = "#8d8378", acc = "#3c6b5d", bg = "#f6f2ec";
+          var b = browser(56, 86, 800, 700, "cl-l", "tishina-studio.ru", { bg: bg });
+          var ph = phone(820, 250, 292, 580, "cl-lp", bg);
+
+          var desk =
+            /* шапка сайта */
+            T(b.x + 40, b.y + 50, "ТИШИНА", { size: 18, weight: 700, fill: ink, track: 3 })
+            + T(b.x + 250, b.y + 49, "Услуги", { size: 13.5, fill: mute })
+            + T(b.x + 318, b.y + 49, "Мастера", { size: 13.5, fill: mute })
+            + T(b.x + 398, b.y + 49, "Цены", { size: 13.5, fill: mute })
+            + R(b.x + 596, b.y + 28, 152, 40, { rx: 20, fill: acc })
+            + T(b.x + 672, b.y + 53, "Записаться", { size: 13.5, weight: 600, fill: "#f6f2ec", anchor: "middle" })
+            /* герой: заголовок держим крупным — на превью он и есть работа */
+            /* Кегль подобран по самой длинной строке: жирная кириллица
+               шире латиницы примерно на десятую, и на 46 «хочется
+               молчать» заезжало под кадр справа. */
+            + T(b.x + 40, b.y + 150, "Массаж,", { size: 41, weight: 700, fill: ink })
+            + T(b.x + 40, b.y + 194, "после которого", { size: 41, weight: 700, fill: ink })
+            + T(b.x + 40, b.y + 238, "хочется молчать", { size: 41, weight: 700, fill: ink })
+            + T(b.x + 40, b.y + 284, "Спина, шея, ноги. 60 или 90 минут,", { size: 15.5, fill: mute })
+            + T(b.x + 40, b.y + 308, "без абонементов и лишних разговоров.", { size: 15.5, fill: mute })
+            + R(b.x + 40, b.y + 338, 206, 52, { rx: 26, fill: acc })
+            + T(b.x + 143, b.y + 370, "Записаться онлайн", { size: 15.5, weight: 600, fill: "#f6f2ec", anchor: "middle" })
+            + T(b.x + 40, b.y + 416, "Ответим в Telegram за 15 минут", { size: 12.5, fill: mute, mono: true })
+            /* фото стоит вплотную к правому краю окна: телефон ляжет
+               рядом, и кадр не окажется наполовину под ним */
+            + R(b.x + 452, b.y + 96, 308, 330, { rx: 16, fill: "url(#warm)" })
+            + C(b.x + 606, b.y + 261, 70, { fill: "#ffffff", opacity: 0.13 })
+            + R(b.x + 40, b.y + 462, 720, 1, { fill: ink, opacity: 0.1 })
+            + T(b.x + 40, b.y + 498, "ЦЕНЫ", { size: 11, fill: mute, mono: true, track: 1.8 });
+
+          var price = [
+            ["Классический", "60 мин", "3 200 ₽"],
+            ["Спортивный", "90 мин", "4 600 ₽"],
+            ["Шейно-воротниковый", "30 мин", "1 900 ₽"]
           ];
-          var y = H * 0.16;
-          rows.forEach(function (r) {
-            var w = W * r.w;
-            var h = H * r.h;
-            var x = r.side ? W * 0.93 - w : W * 0.07;
-            box(ctx, x, y, w, h, 10, r.side ? acc(0.36) : ink(0.07));
-            /* строки текста внутри реплики */
-            box(ctx, x + w * 0.09, y + h * 0.27, w * 0.7, h * 0.14, 2, ink(r.side ? 0.16 : 0.10));
-            box(ctx, x + w * 0.09, y + h * 0.55, w * 0.46, h * 0.14, 2, ink(r.side ? 0.12 : 0.07));
-            y += h + H * 0.035;
+          price.forEach(function (row, i) {
+            var y = b.y + 536 + i * 40;
+            desk += T(b.x + 40, y, row[0], { size: 15.5, weight: 600, fill: ink })
+              + T(b.x + 296, y, row[1], { size: 14.5, fill: mute })
+              + T(b.x + 460, y, row[2], { size: 15.5, weight: 600, fill: acc, anchor: "end" });
           });
 
-          /* кнопки быстрого ответа — то, чем диалог и держится */
-          box(ctx, W * 0.07, H * 0.755, W * 0.24, H * 0.055, 30, acc(0.22));
-          box(ctx, W * 0.335, H * 0.755, W * 0.20, H * 0.055, 30, acc(0.22));
+          var mob =
+            T(ph.x + 24, ph.y + 50, "ТИШИНА", { size: 12.5, weight: 700, fill: ink, track: 2.4 })
+            + R(ph.x + ph.w - 56, ph.y + 34, 32, 22, { rx: 6, fill: ink, opacity: 0.08 })
+            + T(ph.x + 24, ph.y + 118, "Массаж,", { size: 30, weight: 700, fill: ink })
+            + T(ph.x + 24, ph.y + 152, "после", { size: 30, weight: 700, fill: ink })
+            + T(ph.x + 24, ph.y + 186, "которого", { size: 30, weight: 700, fill: ink })
+            + T(ph.x + 24, ph.y + 220, "тихо", { size: 30, weight: 700, fill: ink })
+            + R(ph.x + 24, ph.y + 250, ph.w - 48, 168, { rx: 14, fill: "url(#warm)" })
+            + lines(ph.x + 24, ph.y + 444, ph.w - 60, 3, { fill: ink, opacity: 0.14 })
+            /* закреплённая кнопка — та самая, ради которой всё */
+            + R(ph.x, ph.y + ph.h - 88, ph.w, 88, { fill: bg })
+            + R(ph.x, ph.y + ph.h - 88, ph.w, 1, { fill: ink, opacity: 0.08 })
+            + R(ph.x + 18, ph.y + ph.h - 70, ph.w - 36, 50, { rx: 25, fill: acc })
+            + T(ph.x + ph.w / 2, ph.y + ph.h - 38, "Записаться · 3 200 ₽",
+                { size: 14.5, weight: 600, fill: "#f6f2ec", anchor: "middle" });
 
-          box(ctx, W * 0.07, H * 0.865, W * 0.72, H * 0.075, 30, ink(0.055));
-          box(ctx, W * 0.11, H * 0.893, W * 0.22, H * 0.02, 2, ink(0.06));
-          disc(ctx, W * 0.87, H * 0.9025, H * 0.037, acc(0.55));
+          return {
+            defs: '<linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">'
+              + '<stop offset="0" stop-color="#c8a288"/><stop offset=".55" stop-color="#a87f66"/>'
+              + '<stop offset="1" stop-color="#6d5344"/></linearGradient>',
+            body: b.clip + ph.clip + b.frame
+              + '<g clip-path="url(#cl-l)">' + desk + "</g>"
+              + ph.frame + '<g clip-path="url(#cl-lp)">' + mob + "</g>" + ph.notch
+          };
         },
 
-        /* витрина: поиск, колонка фильтров, сетка товаров, корзина */
-        catalog: function (ctx, W, H, rand) {
-          box(ctx, W * 0.06, H * 0.05, W * 0.42, H * 0.06, 30, ink(0.06));
-          box(ctx, W * 0.10, H * 0.071, W * 0.16, H * 0.018, 2, ink(0.07));
-          box(ctx, W * 0.79, H * 0.05, W * 0.15, H * 0.06, 30, acc(0.5));
+        /* 2. КАРТОЧКИ МАРКЕТПЛЕЙСА · белое, крупное, контрастное.
+              Веером, как в выдаче: средняя выдвинута вперёд.     */
+        cards: function () {
+          var ink = "#141518", mute = "#7c8189", hot = "#e0483a", warn = "#f2b73d";
+          var out = "";
 
-          box(ctx, W * 0.06, H * 0.17, W * 0.21, H * 0.72, 6, ink(0.045));
-          box(ctx, W * 0.09, H * 0.21, W * 0.12, H * 0.022, 2, acc(0.4));
-          for (var r = 0; r < 5; r++) {
-            var y = H * (0.28 + r * 0.09);
-            /* один фильтр отмечен — иначе колонка читается пустым списком */
-            box(ctx, W * 0.09, y, W * 0.022, H * 0.03, 2, r === 1 ? acc(0.6) : ink(0.09));
-            box(ctx, W * 0.125, y + H * 0.006, W * (0.09 + rand() * 0.05), H * 0.018, 2, ink(0.06));
+          var set = [
+            { x: 66, y: 214, w: 322, h: 516, mid: 0, name: "Термокружка 450 мл", sub: "Сталь, вакуум", price: "1 290 ₽", old: "2 190 ₽" },
+            { x: 428, y: 142, w: 344, h: 636, mid: 1, name: "Термокружка 600 мл", sub: "Держит тепло 12 часов", price: "1 690 ₽", old: "2 890 ₽" },
+            { x: 812, y: 214, w: 322, h: 516, mid: 0, name: "Термос 1 литр", sub: "Для поездок", price: "2 340 ₽", old: "3 100 ₽" }
+          ];
+
+          /* Силуэт термокружки: конус корпуса, крышка, диагональный
+             блик. Прямоугольник вместо товара сводил бы всю работу
+             к «серый квадрат на белом».                           */
+          function cup(cx, top, w, h) {
+            var half = w / 2, foot = half * 0.82;
+            return P("M" + (cx - half) + " " + (top + 16)
+                   + "h" + w + "l" + (half - foot).toFixed(1) + " " + (h - 26)
+                   + "a10 10 0 0 1-10 10h" + (-(foot * 2 - 20)).toFixed(1)
+                   + "a10 10 0 0 1-10-10z", { fill: "url(#steelcup)" })
+              + R(cx - half * 0.92, top, w * 0.92, 22, { rx: 9, fill: "#7f8791" })
+              + R(cx - half * 0.66, top - 9, w * 0.66, 12, { rx: 6, fill: "#9aa2ac" })
+              /* блик — мягкая вертикальная полоса вдоль корпуса;
+                 диагональная «щепка» читалась дефектом печати */
+              + R(cx - half * 0.46, top + 30, w * 0.15, h - 62, { rx: w * 0.075, fill: "url(#gloss)" })
+              + R(cx + half * 0.34, top + 40, w * 0.07, h - 84, { rx: w * 0.035, fill: "#ffffff", opacity: 0.22 });
           }
 
-          for (var i = 0; i < 6; i++) {
-            var cx = W * (0.31 + (i % 3) * 0.225);
-            var cy = H * (0.17 + Math.floor(i / 3) * 0.375);
-            box(ctx, cx, cy, W * 0.195, H * 0.335, 6, ink(0.065));
-            box(ctx, cx + W * 0.015, cy + H * 0.03, W * 0.165, H * 0.19, 4, ink(0.10));
-            box(ctx, cx + W * 0.015, cy + H * 0.245, W * 0.13, H * 0.024, 2, ink(0.08));
-            box(ctx, cx + W * 0.015, cy + H * 0.285, W * 0.07, H * 0.028, 2, acc(0.45));
-          }
-        },
-
-        /* отчёт: график динамики и таблица под ним */
-        data: function (ctx, W, H, rand) {
-          box(ctx, W * 0.07, H * 0.06, W * 0.26, H * 0.03, 2, ink(0.10));
-          box(ctx, W * 0.78, H * 0.06, W * 0.15, H * 0.03, 3, acc(0.4));
-          box(ctx, W * 0.07, H * 0.14, W * 0.86, H * 0.34, 6, ink(0.035));
-
-          var x0 = W * 0.10, x1 = W * 0.90;
-          var yTop = H * 0.19, yBot = H * 0.43;
-          var pts = [], i;
-          for (i = 0; i <= 11; i++) {
-            pts.push({
-              x: x0 + (x1 - x0) * (i / 11),
-              y: yBot - (yBot - yTop) * (0.25 + rand() * 0.6)
-            });
-          }
-
-          /* заливка под линией: без неё график читается царапиной */
-          var g = ctx.createLinearGradient(0, yTop, 0, yBot);
-          g.addColorStop(0, "rgba(91,147,189,0.22)");
-          g.addColorStop(1, "rgba(91,147,189,0)");
-          ctx.fillStyle = g;
-          ctx.beginPath();
-          ctx.moveTo(pts[0].x, yBot);
-          for (i = 0; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-          ctx.lineTo(pts[pts.length - 1].x, yBot);
-          ctx.closePath();
-          ctx.fill();
-
-          ctx.strokeStyle = "rgba(140,192,228,0.85)";
-          ctx.lineWidth = Math.max(1.4, W * 0.004);
-          ctx.lineJoin = "round";
-          ctx.beginPath();
-          for (i = 0; i < pts.length; i++) {
-            if (i) ctx.lineTo(pts[i].x, pts[i].y); else ctx.moveTo(pts[i].x, pts[i].y);
-          }
-          ctx.stroke();
-          /* вторая линия — мы на фоне рынка */
-          ctx.strokeStyle = "rgba(236,234,228,0.2)";
-          ctx.lineWidth = Math.max(1, W * 0.0025);
-          ctx.beginPath();
-          for (i = 0; i < pts.length; i++) {
-            var yy = pts[i].y + (yBot - yTop) * 0.22;
-            if (i) ctx.lineTo(pts[i].x, yy); else ctx.moveTo(pts[i].x, yy);
-          }
-          ctx.stroke();
-          disc(ctx, pts[11].x, pts[11].y, Math.max(2.5, W * 0.007), "rgba(140,192,228,0.95)");
-
-          box(ctx, W * 0.07, H * 0.55, W * 0.86, H * 0.045, 3, ink(0.08));
-          for (var r2 = 0; r2 < 4; r2++) {
-            var y = H * (0.62 + r2 * 0.085);
-            box(ctx, W * 0.07, y, W * 0.30, H * 0.022, 2, ink(0.07));
-            box(ctx, W * 0.44, y, W * 0.14, H * 0.022, 2, ink(0.05));
-            box(ctx, W * 0.64, y, W * 0.12, H * 0.022, 2, ink(0.05));
-            /* колонка изменения цены — единственное, ради чего
-               этот отчёт открывают */
-            box(ctx, W * 0.82, y - H * 0.008, W * 0.11, H * 0.038, 3,
-                r2 % 2 ? acc(0.42) : ink(0.06));
-          }
-        },
-
-        /* квиз: прогресс, вопрос, варианты, кнопка «дальше» */
-        quiz: function (ctx, W, H, rand) {
-          box(ctx, W * 0.10, H * 0.09, W * 0.80, H * 0.014, 20, ink(0.07));
-          box(ctx, W * 0.10, H * 0.09, W * 0.80 * 0.55, H * 0.014, 20, acc(0.65));
-          box(ctx, W * 0.10, H * 0.135, W * 0.14, H * 0.02, 2, ink(0.06));
-
-          box(ctx, W * 0.10, H * 0.20, W * 0.54, H * 0.05, 3, ink(0.13));
-          box(ctx, W * 0.10, H * 0.275, W * 0.34, H * 0.026, 2, ink(0.06));
-
-          for (var i = 0; i < 4; i++) {
-            var y = H * (0.36 + i * 0.125);
-            var chosen = i === 1;
-            box(ctx, W * 0.10, y, W * 0.80, H * 0.095, 6, chosen ? acc(0.16) : ink(0.05));
-            if (chosen) {
-              ctx.save();
-              ctx.strokeStyle = "rgba(91,147,189,0.6)";
-              ctx.lineWidth = Math.max(1, W * 0.0025);
-              ctx.strokeRect(W * 0.10, y, W * 0.80, H * 0.095);
-              ctx.restore();
+          set.forEach(function (c, i) {
+            var mid = c.mid;
+            var id = "cl-c" + i;
+            var padX = mid ? 22 : 18;
+            var shotH = mid ? 392 : 320;
+            out += '<clipPath id="' + id + '">' + R(c.x, c.y, c.w, c.h, { rx: 16 }) + "</clipPath>";
+            out += R(c.x, c.y, c.w, c.h, { rx: 16, fill: "#ffffff", filter: "lift" });
+            out += '<g clip-path="url(#' + id + ')">';
+            out += R(c.x, c.y, c.w, shotH, { fill: "#f2f0ed" });
+            /* мягкая тень под товаром — кадр перестаёт быть аппликацией */
+            out += '<ellipse cx="' + (c.x + c.w / 2) + '" cy="' + (c.y + shotH - 44)
+                 + '" rx="' + (c.w * 0.26) + '" ry="14" fill="#141518" opacity=".1"/>';
+            out += cup(c.x + c.w / 2, c.y + (mid ? 84 : 74), c.w * (mid ? 0.34 : 0.32), mid ? 250 : 200);
+            if (mid) {
+              /* выноски — приём инфографики: цифра плюс два слова */
+              out += R(c.x + 16, c.y + 118, 124, 58, { rx: 10, fill: "#ffffff", opacity: 0.95 });
+              out += T(c.x + 32, c.y + 148, "12 часов", { size: 19, weight: 700, fill: ink });
+              out += T(c.x + 32, c.y + 166, "держит тепло", { size: 12, fill: mute });
+              out += R(c.x + c.w - 136, c.y + 224, 118, 58, { rx: 10, fill: "#ffffff", opacity: 0.95 });
+              out += T(c.x + c.w - 120, c.y + 254, "450 г", { size: 19, weight: 700, fill: ink });
+              out += T(c.x + c.w - 120, c.y + 272, "вес пустой", { size: 12, fill: mute });
+              out += R(c.x + 16, c.y + 16, 74, 30, { rx: 8, fill: hot });
+              out += T(c.x + 53, c.y + 37, "ХИТ", { size: 14, weight: 700, fill: "#fff", anchor: "middle", track: 1 });
             }
-            var cy = y + H * 0.0475;
-            ring(ctx, W * 0.145, cy, H * 0.022, chosen ? acc(0.75) : ink(0.14),
-                 Math.max(1, W * 0.0025));
-            if (chosen) disc(ctx, W * 0.145, cy, H * 0.011, acc(0.85));
-            box(ctx, W * 0.19, cy - H * 0.011, W * (0.24 + rand() * 0.16), H * 0.022, 2,
-                ink(chosen ? 0.13 : 0.08));
+            /* подпись под кадром */
+            var ty = c.y + shotH + 48;
+            out += T(c.x + padX, ty, c.price, { size: mid ? 29 : 25, weight: 700, fill: ink });
+            out += T(c.x + padX + (mid ? 142 : 118), ty, c.old,
+                     { size: mid ? 15 : 13.5, fill: mute, deco: "line-through" });
+            out += T(c.x + padX, ty + 34, c.name, { size: mid ? 17 : 15, weight: 600, fill: ink });
+            out += T(c.x + padX, ty + 58, c.sub, { size: mid ? 14 : 13, fill: mute });
+            /* рейтинг: звезда мельче подписи, иначе перетягивает на себя */
+            var sx = c.x + padX + 6, sy = ty + 88;
+            out += P("M" + sx + " " + (sy - 7) + "l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z",
+                     { fill: warn });
+            out += T(c.x + padX + 20, ty + 92, "4,9", { size: 14, weight: 600, fill: ink });
+            out += T(c.x + padX + 52, ty + 92, "· 1 284 отзыва", { size: 13, fill: mute });
+            if (mid) {
+              out += R(c.x + padX, ty + 116, c.w - padX * 2, 50, { rx: 10, fill: "#141518" });
+              out += T(c.x + c.w / 2, ty + 147, "В корзину", { size: 16, weight: 600, fill: "#fff", anchor: "middle" });
+            }
+            out += "</g>";
+          });
+
+          /* подпись серии сверху */
+          out = R(432, 62, 336, 40, { rx: 20, fill: "#ffffff", opacity: 0.1 })
+            + T(600, 88, "OZON · WILDBERRIES · ОДИН КОМПЛЕКТ",
+                { size: 13, fill: "#e8e6e2", anchor: "middle", mono: true, track: 1.4 })
+            + out;
+
+          return {
+            defs: '<linearGradient id="steelcup" x1="0" y1="0" x2="1" y2="0">'
+              + '<stop offset="0" stop-color="#9aa2ac"/><stop offset=".22" stop-color="#e8eaed"/>'
+              + '<stop offset=".5" stop-color="#b6bdc5"/><stop offset=".78" stop-color="#dfe3e7"/>'
+              + '<stop offset="1" stop-color="#79818b"/></linearGradient>'
+              + '<linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">'
+              + '<stop offset="0" stop-color="#ffffff" stop-opacity=".62"/>'
+              + '<stop offset="1" stop-color="#ffffff" stop-opacity=".12"/></linearGradient>',
+            body: out
+          };
+        },
+
+        /* 3. БОТ · слева живой диалог, справа то, во что он
+              превращается. Одна работа — две половины, иначе
+              «бот» на кадре неотличим от любой переписки.        */
+        bot: function () {
+          var chatBg = "#17212b", inb = "#1f2c38", outb = "#2f5d8a";
+          var ph = phone(96, 74, 372, 752, "cl-b", chatBg);
+          var body = "";
+
+          /* шапка чата */
+          body += R(ph.x, ph.y, ph.w, 78, { fill: "#1d2733" })
+            + C(ph.x + 42, ph.y + 46, 17, { fill: "#3c7fb1" })
+            + T(ph.x + 42, ph.y + 52, "Т", { size: 17, weight: 700, fill: "#fff", anchor: "middle" })
+            + T(ph.x + 72, ph.y + 42, "Тишина · запись", { size: 15, weight: 600, fill: "#eef2f5" })
+            + T(ph.x + 72, ph.y + 62, "бот · отвечает сразу", { size: 12, fill: "#7f8f9d" });
+
+          var y = ph.y + 104;
+          /* Высоту пузыря считаем от числа строк, а не задаём руками:
+             на короткой реплике подпись времени наезжала на текст. */
+          function bubble(side, w, rows, at) {
+            var h = 22 + rows.length * 20 + 16;
+            var x = side ? ph.x + ph.w - 20 - w : ph.x + 20;
+            var s = R(x, y, w, h, { rx: 16, fill: side ? outb : inb });
+            for (var i = 0; i < rows.length; i++) {
+              s += T(x + 16, y + 28 + i * 20, rows[i], { size: 13.5, fill: side ? "#eaf2f8" : "#c9d4de" });
+            }
+            s += T(x + w - 14, y + h - 9, at + (side ? " ✓✓" : ""),
+                   { size: 10, fill: side ? "#a8c6dd" : "#71808d", anchor: "end", mono: true });
+            y += h + 12;
+            return s;
           }
 
-          box(ctx, W * 0.71, H * 0.87, W * 0.19, H * 0.075, 30, acc(0.55));
+          body += bubble(0, 268, ["Здравствуйте! Подберём мастера.", "Какая услуга нужна?"], "18:38");
+          /* кнопки быстрого ответа — на них диалог и держится */
+          body += R(ph.x + 20, y, 150, 34, { rx: 17, fill: "#22333f", stroke: "#33586f", sw: 1 })
+            + T(ph.x + 95, y + 22, "Классический", { size: 12.5, fill: "#8fc0e0", anchor: "middle" })
+            + R(ph.x + 178, y, 122, 34, { rx: 17, fill: "#22333f", stroke: "#33586f", sw: 1 })
+            + T(ph.x + 239, y + 22, "Спортивный", { size: 12.5, fill: "#8fc0e0", anchor: "middle" });
+          y += 48;
+          body += bubble(1, 150, ["Спортивный"], "18:39");
+          body += bubble(0, 208, ["Когда вам удобно?"], "18:39");
+          body += bubble(1, 216, ["Завтра после 18:00"], "18:41");
+          body += bubble(0, 292, ["Записал. Мастер Ирина,", "завтра 18:30, 90 минут.", "Напомним за два часа."], "18:41");
+
+          /* поле ввода */
+          body += R(ph.x, ph.y + ph.h - 76, ph.w, 76, { fill: "#1d2733" })
+            + R(ph.x + 18, ph.y + ph.h - 60, ph.w - 88, 44, { rx: 22, fill: "#141d26" })
+            + T(ph.x + 40, ph.y + ph.h - 32, "Сообщение", { size: 13, fill: "#5f6f7c" })
+            + C(ph.x + ph.w - 40, ph.y + ph.h - 38, 22, { fill: "#3c7fb1" })
+            + P("M" + (ph.x + ph.w - 48) + " " + (ph.y + ph.h - 38) + "h16m-6-6 6 6-6 6",
+                { stroke: "#fff", sw: 2 });
+
+          /* правая половина: таблица, куда всё это приезжает */
+          var tx = 524, ty = 150, tw = 616, th = 470;
+          var sheetInk = "#1d2024", sheetMute = "#767c85";
+          var tbl = R(tx, ty, tw, th, { rx: 12, fill: "#ffffff", filter: "lift" })
+            + R(tx, ty, tw, 56, { rx: 12, fill: "#f3f5f3" })
+            + R(tx, ty + 44, tw, 12, { fill: "#f3f5f3" })
+            + C(tx + 30, ty + 28, 9, { fill: "#3c8f63" })
+            + T(tx + 52, ty + 33, "Заявки · август", { size: 15, weight: 600, fill: sheetInk })
+            + T(tx + tw - 22, ty + 33, "Google Sheets", { size: 12, fill: sheetMute, anchor: "end", mono: true });
+
+          var cols = [26, 132, 300, 470];
+          var head = ["ВРЕМЯ", "ИМЯ", "УСЛУГА", "СТАТУС"];
+          head.forEach(function (h, i) {
+            tbl += T(tx + cols[i], ty + 86, h, { size: 11, fill: sheetMute, mono: true, track: 1.2 });
+          });
+          tbl += R(tx + 20, ty + 100, tw - 40, 1, { fill: "#e2e5e1" });
+
+          var rows = [
+            ["18:42", "Анна К.", "Спортивный, 90 мин", "Новая", "#3c8f63"],
+            ["17:15", "Дмитрий", "Классический, 60 мин", "В работе", "#c98a2e"],
+            ["16:03", "Мария Л.", "Шейно-воротниковый", "Готово", "#6b7280"],
+            ["14:20", "Ольга", "Спортивный, 60 мин", "Готово", "#6b7280"],
+            ["11:48", "Сергей П.", "Классический, 90 мин", "Готово", "#6b7280"]
+          ];
+          rows.forEach(function (r, i) {
+            var ry = ty + 136 + i * 62;
+            if (i === 0) tbl += R(tx + 14, ry - 24, tw - 28, 50, { rx: 8, fill: "#eef6f1" });
+            tbl += T(tx + cols[0], ry, r[0], { size: 14, fill: sheetMute, mono: true })
+              + T(tx + cols[1], ry, r[1], { size: 14.5, weight: i === 0 ? 600 : 400, fill: sheetInk })
+              + T(tx + cols[2], ry, r[2], { size: 14, fill: "#4b5158" })
+              + R(tx + cols[3], ry - 17, 104, 26, { rx: 13, fill: r[4], opacity: 0.12 })
+              + T(tx + cols[3] + 52, ry, r[3], { size: 12.5, weight: 600, fill: r[4], anchor: "middle" })
+              + R(tx + 20, ry + 22, tw - 40, 1, { fill: "#eceee9" });
+          });
+
+          /* уведомление ответственному — третий участник схемы */
+          var nx = 560, ny = 664;
+          tbl += R(nx, ny, 544, 116, { rx: 14, fill: "#1c2530", filter: "lift" })
+            + R(nx, ny, 544, 116, { rx: 14, stroke: "#31414f", sw: 1 })
+            + C(nx + 40, ny + 44, 18, { fill: "#3c7fb1" })
+            + P("M" + (nx + 32) + " " + (ny + 44) + "l6 6 12-13", { stroke: "#fff", sw: 2.4 })
+            + T(nx + 70, ny + 38, "Новая заявка · Анна К.", { size: 15, weight: 600, fill: "#e9eff4" })
+            + T(nx + 70, ny + 62, "Спортивный, 90 мин · завтра 18:30", { size: 13, fill: "#93a3b1" })
+            + R(nx + 70, ny + 76, 118, 30, { rx: 15, fill: "#2f5d8a" })
+            + T(nx + 129, ny + 96, "Беру", { size: 13, weight: 600, fill: "#fff", anchor: "middle" })
+            + R(nx + 198, ny + 76, 134, 30, { rx: 15, fill: "#243140" })
+            + T(nx + 265, ny + 96, "Передать", { size: 13, fill: "#93a3b1", anchor: "middle" });
+
+          return {
+            defs: "",
+            body: ph.clip + ph.frame + '<g clip-path="url(#cl-b)">' + body + "</g>" + ph.notch + tbl
+          };
+        },
+
+        /* 4. ВИТРИНА · светлый каталог, тёплая нейтральная гамма.
+              Главное на кадре — фильтры и то, что выдача под них
+              уже перестроилась.                                  */
+        catalog: function () {
+          var ink = "#23262a", mute = "#8a8781", acc = "#a8703c", bg = "#faf8f5";
+          var b = browser(72, 92, 1056, 700, "cl-k", "mebel-loft.ru/katalog", { bg: bg });
+          var s = "";
+
+          /* шапка */
+          s += T(b.x + 36, b.y + 48, "ЛОФТ", { size: 18, weight: 700, fill: ink, track: 3 })
+            + R(b.x + 148, b.y + 26, 372, 40, { rx: 20, fill: "#ffffff", stroke: "#e6e1da", sw: 1 })
+            + C(b.x + 174, b.y + 45, 6.5, { stroke: mute, sw: 2 })
+            + P("M" + (b.x + 179) + " " + (b.y + 50) + "l6 6", { stroke: mute, sw: 2 })
+            + T(b.x + 194, b.y + 51, "диван угловой", { size: 14, fill: "#5d5a55" })
+            + T(b.x + b.w - 168, b.y + 51, "Найдено 148", { size: 13, fill: mute, mono: true })
+            + C(b.x + b.w - 58, b.y + 45, 19, { fill: ink })
+            + P("M" + (b.x + b.w - 67) + " " + (b.y + 41) + "h18l-2.5 12h-13z", { stroke: "#fff", sw: 1.6 })
+            + P("M" + (b.x + b.w - 62) + " " + (b.y + 41) + "a4 4 0 0 1 8 0", { stroke: "#fff", sw: 1.6 })
+            + C(b.x + b.w - 44, b.y + 33, 9, { fill: acc })
+            + T(b.x + b.w - 44, b.y + 37, "3", { size: 11, weight: 700, fill: "#fff", anchor: "middle" });
+
+          /* выбранные фильтры чипами — доказательство, что подбор живой */
+          var chips = ["Диваны", "Угловые", "Серый", "до 90 000 ₽"];
+          var cx = b.x + 36;
+          chips.forEach(function (c) {
+            /* кириллица шире латиницы, и под крестик нужен свой запас —
+               иначе он садится прямо на последнюю букву */
+            var w = 52 + c.length * 8.6;
+            s += R(cx, b.y + 84, w, 32, { rx: 16, fill: acc, opacity: 0.12 })
+              + T(cx + 15, b.y + 105, c, { size: 13, weight: 500, fill: acc })
+              + P("M" + (cx + w - 19) + " " + (b.y + 96) + "l8 8m0-8-8 8", { stroke: acc, sw: 1.6, opacity: 0.8 });
+            cx += w + 10;
+          });
+          s += T(cx + 8, b.y + 105, "Сбросить", { size: 13, fill: mute, deco: "underline" });
+
+          /* колонка фильтров */
+          var fx = b.x + 36, fy = b.y + 146;
+          s += T(fx, fy, "ТИП", { size: 11, fill: mute, mono: true, track: 1.6 });
+          var opts = [["Прямые", 0], ["Угловые", 1], ["Модульные", 0], ["Кресла", 0]];
+          opts.forEach(function (o, i) {
+            var y = fy + 30 + i * 34;
+            s += R(fx, y - 13, 18, 18, { rx: 5, fill: o[1] ? acc : "#ffffff", stroke: o[1] ? acc : "#d9d4cc", sw: 1.5 });
+            if (o[1]) s += P("M" + (fx + 4) + " " + (y - 4) + "l4 4 7-8", { stroke: "#fff", sw: 2 });
+            s += T(fx + 30, y + 1, o[0], { size: 14, fill: o[1] ? ink : "#5d5a55" });
+          });
+          s += T(fx, fy + 196, "ЦЕНА", { size: 11, fill: mute, mono: true, track: 1.6 })
+            + R(fx, fy + 220, 188, 4, { rx: 2, fill: "#e3ded6" })
+            + R(fx, fy + 220, 132, 4, { rx: 2, fill: acc })
+            + C(fx, fy + 222, 9, { fill: "#fff", stroke: acc, sw: 2.5 })
+            + C(fx + 132, fy + 222, 9, { fill: "#fff", stroke: acc, sw: 2.5 })
+            + T(fx, fy + 254, "12 000 — 90 000 ₽", { size: 13, fill: "#5d5a55", mono: true })
+            + T(fx, fy + 306, "ЦВЕТ", { size: 11, fill: mute, mono: true, track: 1.6 });
+          ["#8f8b84", "#4a5560", "#b9a894", "#3e4340", "#c4b7a4"].forEach(function (col, i) {
+            s += C(fx + 15 + i * 38, fy + 336, 15, { fill: col, stroke: i === 0 ? acc : "none", sw: 2.5 });
+          });
+
+          /* сетка товаров */
+          var gx = b.x + 272, gy = b.y + 142;
+          var goods = [
+            ["Диван «Осло»", "76 400 ₽", "серый велюр", "#9a958d"],
+            ["Диван «Берген»", "84 900 ₽", "рогожка", "#6d7681"],
+            ["Диван «Тромсё»", "68 200 ₽", "лён", "#b6a893"],
+            ["Кресло «Фьорд»", "31 500 ₽", "букле", "#8c8579", "chair"],
+            ["Диван «Ставангер»", "92 000 ₽", "кожа", "#4d4a46"],
+            ["Пуф «Нордик»", "12 900 ₽", "велюр", "#a2988a", "pouf"]
+          ];
+          /* Силуэт дивана вместо серого поля: спинка, сиденье, два
+             подлокотника, ножки. На превью узнаётся с первого взгляда,
+             а именно этого от карточки каталога и ждут. */
+          function sofa(x, y, w, h, form) {
+            /* Ширина силуэта идёт от типа: кресло вровень с диваном —
+               ошибка, которую в каталоге мебели видно сразу. */
+            var k = form === "chair" ? 0.54 : form === "pouf" ? 0.46 : 1;
+            var ox = x + w * (1 - k) / 2, ow = w * k;
+            var s2 = "";
+            if (form !== "pouf") {
+              s2 += R(ox + ow * 0.08, y + h * 0.24, ow * 0.84, h * 0.36, { rx: 10, fill: "#fff", opacity: 0.17 });
+            }
+            var seatY = form === "pouf" ? y + h * 0.54 : y + h * 0.5;
+            var seatH = form === "pouf" ? h * 0.26 : h * 0.3;
+            s2 += R(ox + ow * 0.04, seatY, ow * 0.92, seatH, { rx: 12, fill: "#fff", opacity: 0.1 });
+            if (form !== "pouf") {
+              s2 += R(ox + ow * 0.04, y + h * 0.44, ow * 0.13, h * 0.34, { rx: 8, fill: "#000", opacity: 0.14 })
+                + R(ox + ow * 0.83, y + h * 0.44, ow * 0.13, h * 0.34, { rx: 8, fill: "#000", opacity: 0.14 });
+            }
+            s2 += R(ox + ow * 0.12, y + h * 0.8, ow * 0.05, h * 0.09, { rx: 2, fill: "#000", opacity: 0.28 })
+              + R(ox + ow * 0.83, y + h * 0.8, ow * 0.05, h * 0.09, { rx: 2, fill: "#000", opacity: 0.28 });
+            return s2;
+          }
+
+          goods.forEach(function (g, i) {
+            var x = gx + (i % 3) * 254;
+            var y = gy + Math.floor(i / 3) * 250;
+            var id = "cl-g" + i;
+            s += '<clipPath id="' + id + '">' + R(x, y, 230, 146, { rx: 10 }) + "</clipPath>";
+            s += R(x, y, 230, 146, { rx: 10, fill: g[3] })
+              + '<g clip-path="url(#' + id + ')">' + sofa(x, y, 230, 146, g[4]) + "</g>"
+              + T(x, y + 174, g[0], { size: 15, weight: 600, fill: ink })
+              + T(x, y + 196, g[2], { size: 13, fill: mute })
+              + T(x, y + 223, g[1], { size: 17, weight: 700, fill: ink });
+            if (i === 1) {
+              s += R(x + 156, y + 12, 62, 26, { rx: 13, fill: "#ffffff", opacity: 0.92 })
+                + T(x + 187, y + 30, "−15%", { size: 13, weight: 700, fill: acc, anchor: "middle" });
+            }
+          });
+
+          return { defs: "", body: b.clip + b.frame + '<g clip-path="url(#cl-k)">' + s + "</g>" };
+        },
+
+        /* 5. ПАРСЕР · единственная тёмная работа в серии, и это
+              оправдано: отчёт смотрят утром и целыми днями.      */
+        data: function () {
+          var bg = "#0f1319", card = "#161c24", line = "#232c37";
+          var ink = "#e6ebf0", mute = "#7d8896";
+          var up = "#e0574a", down = "#46a06f", mine = "#5b93bd";
+          var b = browser(64, 84, 1072, 716, "cl-d", "prices.local/report", { bg: bg, dark: true });
+          var s = "";
+
+          s += T(b.x + 34, b.y + 50, "Цены конкурентов", { size: 24, weight: 700, fill: ink })
+            + T(b.x + 34, b.y + 76, "12 августа, 09:00 · сбор завершён за 4 мин 12 с",
+                { size: 13, fill: mute, mono: true })
+            + R(b.x + b.w - 194, b.y + 30, 160, 38, { rx: 8, fill: mine, opacity: 0.16 })
+            + R(b.x + b.w - 194, b.y + 30, 160, 38, { rx: 8, stroke: mine, sw: 1 })
+            + T(b.x + b.w - 114, b.y + 55, "Выгрузить CSV", { size: 13.5, weight: 500, fill: "#8cc0e4", anchor: "middle" });
+
+          /* плитки итога */
+          var kpi = [
+            ["Мы дороже рынка", "4,2 %", up, "по 18 позициям из 96"],
+            ["Изменений за сутки", "23", ink, "у пяти площадок"],
+            /* «ушли ниже нас» — плохая новость, и зелёным её красить
+               нельзя: цвет на сводке читают раньше слов */
+            ["Ниже нас ушли", "6", up, "позиций требуют решения"]
+          ];
+          kpi.forEach(function (k, i) {
+            var x = b.x + 34 + i * 336;
+            s += R(x, b.y + 102, 312, 108, { rx: 12, fill: card })
+              + R(x, b.y + 102, 312, 108, { rx: 12, stroke: line, sw: 1 })
+              + T(x + 22, b.y + 132, k[0], { size: 12.5, fill: mute, mono: true, track: 0.8 })
+              + T(x + 22, b.y + 174, k[1], { size: 34, weight: 700, fill: k[2] })
+              + T(x + 22, b.y + 196, k[3], { size: 12.5, fill: mute });
+          });
+
+          /* график */
+          var cx = b.x + 34, cy = b.y + 234, cw = 636, ch = 268;
+          s += R(cx, cy, cw, ch, { rx: 12, fill: card }) + R(cx, cy, cw, ch, { rx: 12, stroke: line, sw: 1 })
+            + T(cx + 22, cy + 34, "Средняя цена, 30 дней", { size: 14, weight: 600, fill: ink });
+          /* сетка и подписи оси */
+          /* Подписи оси вынесены влево от сетки: справа они ложились
+             прямо на линии графика и читались как часть данных. */
+          var axis = cx + 74;
+          [0, 1, 2, 3].forEach(function (i) {
+            var y = cy + 68 + i * 46;
+            s += R(axis, y, cw - 96, 1, { fill: "#ffffff", opacity: 0.05 })
+              + T(cx + 62, y + 4, ["2 400", "2 200", "2 000", "1 800"][i],
+                  { size: 10.5, fill: mute, anchor: "end", mono: true, opacity: 0.7 });
+          });
+
+          var gx0 = axis + 8, gx1 = cx + cw - 40;
+          function px(i, len) { return gx0 + (gx1 - gx0) * (i / (len - 1)); }
+          function py(v) { return cy + 68 + 138 * (1 - v); }
+          function poly(vals, col, w, op) {
+            var d = "", i;
+            for (i = 0; i < vals.length; i++) {
+              d += (i ? "L" : "M") + px(i, vals.length).toFixed(1) + " " + py(vals[i]).toFixed(1);
+            }
+            return P(d, { stroke: col, sw: w, opacity: op == null ? 1 : op });
+          }
+          /* размах намеренно широкий: сплюснутые линии не показывают
+             того единственного, ради чего отчёт и открывают */
+          var us = [0.34, 0.4, 0.36, 0.48, 0.44, 0.56, 0.52, 0.64, 0.6, 0.74, 0.7, 0.82];
+          s += '<path d="M' + gx0 + " " + (cy + 206)
+            + us.map(function (v, i) { return "L" + px(i, us.length).toFixed(1) + " " + py(v).toFixed(1); }).join("")
+            + "L" + gx1 + " " + (cy + 206) + 'Z" fill="url(#dfill)"/>';
+          s += poly([0.16, 0.22, 0.18, 0.26, 0.2, 0.3, 0.26, 0.34, 0.3, 0.38, 0.34, 0.42], "#6b7684", 1.6, 0.65);
+          s += poly([0.72, 0.64, 0.7, 0.6, 0.66, 0.54, 0.5, 0.42, 0.46, 0.36, 0.4, 0.3], "#8a6f9e", 1.6, 0.65);
+          s += poly(us, mine, 3);
+          s += C(gx1, py(0.82), 5.5, { fill: "#8cc0e4" });
+          /* легенда */
+          [["Мы", mine], ["Конкурент А", "#6b7684"], ["Конкурент Б", "#8a6f9e"]].forEach(function (l, i) {
+            var lx = cx + 22 + i * 132;
+            s += R(lx, cy + 240, 16, 3, { rx: 2, fill: l[1] })
+              + T(lx + 24, cy + 245, l[0], { size: 12, fill: mute });
+          });
+
+          /* таблица изменений */
+          var tx = b.x + 700, ty = b.y + 234, tw = 338;
+          s += R(tx, ty, tw, 268, { rx: 12, fill: card }) + R(tx, ty, tw, 268, { rx: 12, stroke: line, sw: 1 })
+            + T(tx + 22, ty + 34, "Что изменилось за сутки", { size: 14, weight: 600, fill: ink });
+          var moves = [
+            ["Термокружка 450", "1 190 ₽", "−8 %", down],
+            ["Термос 1 л", "2 460 ₽", "+3 %", up],
+            ["Кружка 600", "1 640 ₽", "−4 %", down],
+            ["Ланч-бокс", "890 ₽", "+11 %", up],
+            ["Термочехол", "540 ₽", "−2 %", down]
+          ];
+          moves.forEach(function (m, i) {
+            var y = ty + 78 + i * 38;
+            s += T(tx + 20, y, m[0], { size: 13, fill: "#c3ccd6" })
+              + T(tx + 226, y, m[1], { size: 13, fill: ink, mono: true, anchor: "end" })
+              + R(tx + 240, y - 15, 76, 24, { rx: 12, fill: m[3], opacity: 0.16 })
+              + T(tx + 278, y, m[2], { size: 12.5, weight: 600, fill: m[3], anchor: "middle" });
+          });
+
+          /* сводка, которая приходит в Telegram */
+          var nx = b.x + 34, ny = b.y + 526;
+          s += R(nx, ny, 1004, 116, { rx: 12, fill: "#131b24" })
+            + R(nx, ny, 1004, 116, { rx: 12, stroke: "#26333f", sw: 1 })
+            + R(nx, ny, 4, 116, { rx: 2, fill: mine })
+            + C(nx + 44, ny + 44, 18, { fill: "#2f5d8a" })
+            + P("M" + (nx + 36) + " " + (ny + 45) + "l16-7-6 16-3-6z", { fill: "#fff" })
+            + T(nx + 76, ny + 38, "Сводка за 12 августа", { size: 15, weight: 600, fill: ink })
+            + T(nx + 76, ny + 62, "6 позиций ушли ниже нас · 23 изменения · подробности в отчёте",
+                { size: 13, fill: mute })
+            + T(nx + 76, ny + 92, "09:00 · отправлено в «Цены · алерты»", { size: 11.5, fill: "#5d6875", mono: true });
+
+          return {
+            defs: '<linearGradient id="dfill" x1="0" y1="0" x2="0" y2="1">'
+              + '<stop offset="0" stop-color="#5b93bd" stop-opacity=".34"/>'
+              + '<stop offset="1" stop-color="#5b93bd" stop-opacity="0"/></linearGradient>',
+            body: b.clip + b.frame + '<g clip-path="url(#cl-d)">' + s + "</g>"
+          };
+        },
+
+        /* 6. КВИЗ · светлый интерфейс, один вопрос на экране и
+              вилка цены, которая пересчитывается на глазах.      */
+        quiz: function () {
+          var ink = "#191b1f", mute = "#8b8f96", acc = "#4a5fc1", bg = "#ffffff";
+          var b = browser(72, 100, 1056, 686, "cl-q", "remont-raschet.ru/kviz", { bg: bg });
+          var s = "";
+
+          /* прогресс */
+          s += T(b.x + 44, b.y + 46, "Шаг 4 из 6", { size: 13, fill: mute, mono: true, track: 0.6 })
+            + T(b.x + b.w - 44, b.y + 46, "Осталось меньше минуты",
+                { size: 13, fill: mute, anchor: "end" })
+            + R(b.x + 44, b.y + 62, b.w - 88, 6, { rx: 3, fill: "#eceef2" })
+            + R(b.x + 44, b.y + 62, (b.w - 88) * 0.62, 6, { rx: 3, fill: acc });
+
+          /* вопрос */
+          s += T(b.x + 44, b.y + 132, "Какая отделка нужна?", { size: 34, weight: 700, fill: ink })
+            + T(b.x + 44, b.y + 166, "Один вариант. Можно вернуться назад — ответы сохранятся.",
+                { size: 15, fill: mute });
+
+          var opts = [
+            ["Косметическая", "Обои, покраска, полы", "от 6 900 ₽/м²", 0],
+            ["Капитальная", "Со сменой коммуникаций", "от 12 400 ₽/м²", 1],
+            ["Дизайнерская", "По проекту, с авторским надзором", "от 21 000 ₽/м²", 0],
+            ["Только санузел", "Плитка, сантехника, разводка", "от 94 000 ₽", 0]
+          ];
+          opts.forEach(function (o, i) {
+            var y = b.y + 204 + i * 92;
+            var on = o[3];
+            s += R(b.x + 44, y, 636, 76, { rx: 12, fill: on ? "#f2f4fd" : "#fbfbfc" })
+              + R(b.x + 44, y, 636, 76, { rx: 12, stroke: on ? acc : "#e6e8ec", sw: on ? 2 : 1 })
+              + C(b.x + 80, y + 38, 12, { fill: "#fff", stroke: on ? acc : "#cfd3da", sw: on ? 2.4 : 1.6 });
+            if (on) s += C(b.x + 80, y + 38, 6, { fill: acc });
+            s += T(b.x + 112, y + 33, o[0], { size: 17, weight: 600, fill: ink })
+              + T(b.x + 112, y + 56, o[1], { size: 13.5, fill: mute })
+              + T(b.x + 656, y + 45, o[2], { size: 14, weight: 600, fill: on ? acc : "#6b7079", anchor: "end" });
+          });
+
+          /* кнопки шага */
+          s += R(b.x + 44, b.y + 584, 130, 50, { rx: 25, fill: "#fff", stroke: "#e0e3e8", sw: 1.5 })
+            + T(b.x + 109, b.y + 615, "Назад", { size: 15, fill: "#6b7079", anchor: "middle" })
+            + R(b.x + 190, b.y + 584, 178, 50, { rx: 25, fill: acc })
+            + T(b.x + 279, b.y + 615, "Дальше", { size: 15, weight: 600, fill: "#fff", anchor: "middle" });
+
+          /* панель расчёта — она и есть продукт этой страницы */
+          var px = b.x + 716, py = b.y + 132;
+          s += R(px, py, 296, 424, { rx: 16, fill: "#f7f8fb" })
+            + R(px, py, 296, 424, { rx: 16, stroke: "#e6e8ec", sw: 1 })
+            + T(px + 26, py + 42, "ПРЕДВАРИТЕЛЬНО", { size: 11, fill: mute, mono: true, track: 1.6 })
+            + T(px + 26, py + 86, "480 000", { size: 32, weight: 700, fill: ink })
+            + T(px + 26, py + 118, "— 620 000 ₽", { size: 24, weight: 700, fill: acc })
+            + T(px + 26, py + 146, "за 54 м², под ключ", { size: 13, fill: mute })
+            + R(px + 26, py + 168, 244, 1, { fill: "#e6e8ec" });
+
+          var calc = [
+            ["Работы", "268 000 ₽"],
+            ["Материалы", "184 000 ₽"],
+            ["Санузел", "94 000 ₽"],
+            ["Вывоз мусора", "12 000 ₽"]
+          ];
+          calc.forEach(function (c, i) {
+            var y = py + 202 + i * 34;
+            s += T(px + 26, y, c[0], { size: 14, fill: "#5c6069" })
+              + T(px + 270, y, c[1], { size: 14, weight: 500, fill: ink, anchor: "end", mono: true });
+          });
+          s += R(px + 26, py + 352, 244, 46, { rx: 23, fill: ink })
+            + T(px + 148, py + 381, "Точный расчёт", { size: 14.5, weight: 600, fill: "#fff", anchor: "middle" })
+            + T(px + 148, py + 60, "", { size: 1 });
+
+          /* цифра меняется на глазах — подсказываем это движением */
+          s += R(px + 196, py + 24, 76, 26, { rx: 13, fill: acc, opacity: 0.12 })
+            + T(px + 234, py + 42, "+18 000", { size: 12, weight: 600, fill: acc, anchor: "middle", mono: true });
+
+          return { defs: "", body: b.clip + b.frame + '<g clip-path="url(#cl-q)">' + s + "</g>" };
         }
       };
 
-      function makeShot(kind, seed, W, H) {
-        var cv = document.createElement("canvas");
-        cv.width = W;
-        cv.height = H;
-        var ctx = cv.getContext("2d");
-        if (!ctx) return "";
+      /* Общая сцена: тёмный фон, верхний свет, один холодный
+         рефлекс поверх всех работ и виньетка. Ровно она и делает
+         из шести чужих друг другу интерфейсов одну серию.       */
+      function makeShot(kind) {
+        var sh = (SHEETS[kind] || SHEETS.landing)();
+        return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + SHEET_W + " " + SHEET_H + '"'
+          + ' width="' + SHEET_W + '" height="' + SHEET_H + '">'
+          + "<defs>"
+          + '<radialGradient id="room" cx=".3" cy=".08" r=".95">'
+          + '<stop offset="0" stop-color="#28323c"/><stop offset=".55" stop-color="#12161a"/>'
+          + '<stop offset="1" stop-color="#080a0b"/></radialGradient>'
+          + '<linearGradient id="studio" x1="0" y1="0" x2=".35" y2="1">'
+          + '<stop offset="0" stop-color="#8cc0e4" stop-opacity=".08"/>'
+          + '<stop offset=".6" stop-color="#8cc0e4" stop-opacity="0"/></linearGradient>'
+          + '<linearGradient id="vig" x1="0" y1="0" x2="0" y2="1">'
+          + '<stop offset="0" stop-color="#05060700" />'
+          + '<stop offset=".7" stop-color="#050607" stop-opacity=".05"/>'
+          + '<stop offset="1" stop-color="#050607" stop-opacity=".42"/></linearGradient>'
+          + '<filter id="lift" x="-25%" y="-25%" width="150%" height="160%">'
+          + '<feDropShadow dx="0" dy="22" stdDeviation="26" flood-color="#000" flood-opacity=".55"/>'
+          + "</filter>"
+          + sh.defs
+          + "</defs>"
+          + R(0, 0, SHEET_W, SHEET_H, { fill: "url(#room)" })
+          + sh.body
+          + R(0, 0, SHEET_W, SHEET_H, { fill: "url(#studio)" })
+          + R(0, 0, SHEET_W, SHEET_H, { fill: "url(#vig)" })
+          + "</svg>"
+        );
+      }
 
-        var rand = rng(seed * 9781 + 17);
-
-        ctx.fillStyle = "#0b0d0f";
-        ctx.fillRect(0, 0, W, H);
-        /* свет держим слева сверху во всех кадрах: рядом в карусели
-           разнобой по направлению света выглядел бы монтажом */
-        bloom(ctx, W * 0.28, H * 0.18, W * 0.62, 0.16, "150,196,228");
-        bloom(ctx, W * 0.82, H * 0.86, W * 0.5, 0.09, "236,234,228");
-
-        (SHOTS[kind] || SHOTS.landing)(ctx, W, H, rand);
-
-        var vg = ctx.createLinearGradient(0, 0, 0, H);
-        vg.addColorStop(0, "rgba(5,6,7,0)");
-        vg.addColorStop(0.55, "rgba(5,6,7,0.12)");
-        vg.addColorStop(1, "rgba(5,6,7,0.6)");
-        ctx.fillStyle = vg;
-        ctx.fillRect(0, 0, W, H);
-
-        return cv.toDataURL("image/jpeg", 0.78);
+      /* Один макет обслуживает и карточку, и крупный кадр в
+         кейсе: вектор одинаково резок на обоих размерах, поэтому
+         второй раз рисовать нечего. Собираем по требованию и
+         запоминаем — шесть макетов сразу задержали бы первую
+         отрисовку страницы ради того, что могут и не открыть. */
+      var shotCache = [];
+      function shotFor(i) {
+        if (WORKS[i].shot) return WORKS[i].shot;
+        if (!shotCache[i]) shotCache[i] = makeShot(WORKS[i].kind);
+        return shotCache[i];
       }
 
       /* стрелка вправо для подписи-приглашения; svg собираем
@@ -3331,7 +3804,7 @@
         var shot = document.createElement("div");
         shot.className = "shot";
         var img = document.createElement("img");
-        img.src = work.shot || makeShot(work.kind, i + 1, 480, 360);
+        img.src = shotFor(i);
         /* подпись под карточкой уже сообщает название, поэтому
            картинку для диктора помечаем декоративной            */
         img.alt = "";
@@ -3811,19 +4284,6 @@
       var caseIndex = 0;
       var backTo = null;   /* куда вернуть фокус после закрытия */
 
-      /* Крупный кадр рисуем вдвое подробнее карточного: в панели
-         он занимает половину ширины экрана, и растянутая
-         картинка с карточки читалась бы мылом. Считаем по
-         требованию и запоминаем — рисовать все шесть заранее
-         значит задержать первую отрисовку страницы ради того,
-         что могут и не открыть.                               */
-      var heroCache = [];
-      function heroShot(i) {
-        if (WORKS[i].shot) return WORKS[i].shot;
-        if (!heroCache[i]) heroCache[i] = makeShot(WORKS[i].kind, i + 1, 960, 720);
-        return heroCache[i];
-      }
-
       function el(tag, cls, text) {
         var node = document.createElement(tag);
         if (cls) node.className = cls;
@@ -3855,13 +4315,13 @@
         var work = WORKS[i];
         if (!caseBody) return;
 
-        caseShot.src = heroShot(i);
+        caseShot.src = shotFor(i);
         /* Прямая оговорка про кадр. Выдавать нарисованную схему
            за снимок работы — ровно тот сорт мелкой неправды,
            который замечают первым.                             */
         caseCap.textContent = work.shot
           ? ""
-          : "Кадр собран кодом: схема экрана, а не снимок работы.";
+          : "Макет собран кодом для портфолио — не снимок сданной работы.";
 
         caseBody.innerHTML = "";
 
