@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Политика обработки персональных данных — D.PUCHENKOV</title>
+<meta name="description" content="Какие данные собирает сайт D.PUCHENKOV, зачем и как от этого отказаться.">
+<link rel="canonical" href="https://puchenkoff.ru/privacy.html">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2308090a'/%3E%3Ctext x='32' y='44' font-family='system-ui,sans-serif' font-size='34' font-weight='700' fill='%23eceae4' text-anchor='middle'%3ED%3C/text%3E%3Ccircle cx='47' cy='40' r='3.4' fill='%235b93bd'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#08090a">
+<meta name="color-scheme" content="dark">
+<style>
+  /* Страница живёт отдельно от index.html и своих стилей оттуда не
+     получает — тот же приём, что и у 404.html. Заводить общий CSS-
+     файл ради двух вспомогательных страниц значило бы добавить
+     сайту первый внешний запрос, которых у него по дизайну ноль. */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: #08090a;
+    color: #eceae4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display",
+                 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  body {
+    padding: clamp(28px, 6vw, 64px) clamp(20px, 6vw, 24px) 80px;
+  }
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 40px;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas,
+                 "Liberation Mono", Menlo, monospace;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: #9ea1a3;
+    transition: color 0.3s ease;
+  }
+  .back:hover { color: #8cc0e4; }
+  .back svg { display: block; }
+  .kicker {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas,
+                 "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #5b93bd;
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(28px, 5vw, 38px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    margin: 0 0 12px;
+  }
+  .updated {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas,
+                 "Liberation Mono", Menlo, monospace;
+    font-size: 12.5px;
+    color: #74797e;
+    margin: 0 0 48px;
+  }
+  h2 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 44px 0 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(91, 147, 189, 0.24);
+    color: #5b93bd;
+  }
+  p {
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: #9ea1a3;
+    margin: 0 0 16px;
+  }
+  p b { color: #eceae4; font-weight: 600; }
+  ul {
+    margin: 0 0 16px;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  li {
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: #9ea1a3;
+  }
+  .contacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .contacts a {
+    padding: 8px 16px;
+    border: 1px solid #1e2225;
+    border-radius: 999px;
+    font-size: 13.5px;
+    color: #eceae4;
+    transition: border-color 0.3s ease, background 0.3s ease;
+  }
+  .contacts a:hover {
+    border-color: #5b93bd;
+    background: rgba(91, 147, 189, 0.1);
+  }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+      <path d="M10.5 2.5L2.5 10.5M2.5 10.5H8.5M2.5 10.5V4.5"
+            stroke="currentColor" stroke-width="1.6"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    D.PUCHENKOV
+  </a>
+
+  <p class="kicker">Персональные данные</p>
+  <h1>Политика обработки персональных данных</h1>
+  <p class="updated">Действует с 10 августа 2026 года</p>
+
+  <p>Сайт puchenkoff.ru — личное портфолио, не интернет-магазин и не сервис с регистрацией. Данных на нём собирается немного, но закон (152-ФЗ «О персональных данных») требует сказать прямо, какие именно и зачем. Этот текст — честный ответ на этот вопрос, а не юридическая формальность для галочки.</p>
+
+  <h2>Кто обрабатывает данные</h2>
+  <p>Оператор — <b>Дмитрий Пученков</b>, владелец сайта. Связаться по любому вопросу о данных можно тем же способом, что и по рабочим задачам:</p>
+  <div class="contacts">
+    <a href="https://t.me/gothY1L" target="_blank" rel="noopener">Telegram · @gothY1L</a>
+    <a href="mailto:d.puchenkov@mail.ru">d.puchenkov@mail.ru</a>
+  </div>
+
+  <h2>Что собирается автоматически</h2>
+  <p>При посещении сайта работает счётчик <b>Яндекс.Метрики</b>. Он фиксирует технические данные о визите: IP-адрес, тип устройства и браузера, какие страницы и в каком порядке открывались, откуда пришёл переход. Эти данные обезличенные — сайт не узнаёт имя или контакты посетителя, пока тот сам их не сообщит.</p>
+  <p>Запись действий мышью и экрана (Вебвизор) в коде сайта отключена — счётчик не пишет видео сеанса, только считает визиты и переходы.</p>
+  <p>Метрика ставит собственные cookie-файлы для распознавания повторных визитов. Их можно заблокировать в настройках браузера или расширением — сайт при этом продолжит работать как обычно, просто перестанет попадать в статистику.</p>
+
+  <h2>Что собирается только если вы сами это присылаете</h2>
+  <p>Формы обратной связи на сайте нет — обращение идёт напрямую в Telegram, на почту или через Kwork. Всё, что вы пишете в переписке (имя, контакты, описание задачи), остаётся в истории этой переписки и используется только для ответа по вашему обращению. На сайт эти данные не попадают и не хранятся отдельно.</p>
+
+  <h2>Зачем это нужно</h2>
+  <ul>
+    <li>Понять, доходят ли посетители до раздела с работами и открывают ли отдельные кейсы — без этого сайт нельзя осмысленно улучшать.</li>
+    <li>Ответить на обращение, если вы написали через один из каналов связи.</li>
+  </ul>
+  <p>Данные никому не передаются и не продаются. Единственная сторона, которая их видит, — сам Яндекс как оператор счётчика, согласно <a href="https://yandex.ru/legal/confidential/" target="_blank" rel="noopener" style="text-decoration: underline;">его собственной политике конфиденциальности</a>.</p>
+
+  <h2>Как отказаться</h2>
+  <p>Отключить cookies в браузере, поставить расширение-блокировщик трекеров или включить режим «Не отслеживать» — сайт не проверяет и не требует согласия на слежку, чтобы показать содержимое.</p>
+
+  <h2>Изменения</h2>
+  <p>Если состав собираемых данных изменится — например, появится форма на сайте — этот текст будет обновлён, а дата наверху страницы изменится.</p>
+</main>
+</body>
+</html>
