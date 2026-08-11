@@ -4020,77 +4020,86 @@
           };
         },
 
-        /* 6. КВИЗ · светлый интерфейс, один вопрос на экране и
-              вилка цены, которая пересчитывается на глазах.      */
+        /* 6. КВИЗ · графит и сигнальный оранжевый — та же палитра,
+              что и на самой странице калькулятора. Кадр повторяет
+              её первый экран: заголовок и факты слева, карточка
+              квиза с рельсом прогресса, вопросом и вилкой справа.  */
         quiz: function () {
-          var ink = "#191b1f", mute = "#8b8f96", acc = "#4a5fc1", bg = "#ffffff";
-          var b = browser(72, 100, 1056, 686, "cl-q", "remont-raschet.ru/kviz", { bg: bg });
+          var ink = "#e8eaec", soft = "#aab1b8", faint = "#8b939b";
+          var base = "#141619", lift = "#1c1f24", card = "#22262c";
+          var edge = "#313740", edgeLit = "#525a63";
+          var acc = "#ea580c", accLit = "#f2884a", onAcc = "#141619";
+
+          var b = browser(56, 86, 1088, 700, "cl-q", "uroven.ru/raschet", { dark: true, bg: base });
           var s = "";
 
-          /* прогресс */
-          s += T(b.x + 44, b.y + 46, "Шаг 4 из 6", { size: 13, fill: mute, mono: true, track: 0.6 })
-            + T(b.x + b.w - 44, b.y + 46, "Осталось меньше минуты",
-                { size: 13, fill: mute, anchor: "end" })
-            + R(b.x + 44, b.y + 62, b.w - 88, 6, { rx: 3, fill: "#eceef2" })
-            + R(b.x + 44, b.y + 62, (b.w - 88) * 0.62, 6, { rx: 3, fill: acc });
+          var pad = 44, gap = 40, rightW = 500;
+          var leftX = b.x + pad, rightX = b.x + b.w - pad - rightW;
 
-          /* вопрос */
-          s += T(b.x + 44, b.y + 132, "Какая отделка нужна?", { size: 34, weight: 700, fill: ink })
-            + T(b.x + 44, b.y + 166, "Один вариант. Можно вернуться назад — ответы сохранятся.",
-                { size: 15, fill: mute });
+          /* ── левая колонка: заголовок и факты, как в герое ──── */
+          s += R(leftX, b.y + 172, 22, 2, { fill: acc })
+            + T(leftX + 32, b.y + 178, "РЕМОНТ КВАРТИР ПОД КЛЮЧ", { size: 12, fill: accLit, mono: true, track: 1.4 });
+
+          s += T(leftX, b.y + 252, "Цена —", { size: 42, weight: 800, fill: ink })
+            + T(leftX, b.y + 306, "до начала работ,", { size: 42, weight: 800, fill: accLit })
+            + T(leftX, b.y + 360, "а не в середине", { size: 42, weight: 800, fill: ink });
+
+          s += T(leftX, b.y + 404, "Шесть вопросов вместо разговора «пришлите", { size: 15, fill: soft })
+            + T(leftX, b.y + 426, "планировку» — вилка на каждом шаге.", { size: 15, fill: soft });
+
+          var facts = [["12 лет", "своя бригада"], ["340", "квартир сдано"], ["±8 %", "точность вилки"]];
+          facts.forEach(function (f, i) {
+            var fx = leftX + i * 152;
+            s += R(fx, b.y + 474, 138, 92, { rx: 4, fill: lift, stroke: edge, sw: 1 })
+              + T(fx + 16, b.y + 514, f[0], { size: 22, weight: 800, fill: ink })
+              + T(fx + 16, b.y + 540, f[1], { size: 11.5, fill: faint });
+          });
+
+          /* ── правая колонка: карточка квиза ─────────────────── */
+          var cx = rightX, cy = b.y + 40, cw = rightW, ch = 560;
+          var px = cx + 26, pw = cw - 52;
+          s += R(cx, cy, cw, ch, { rx: 6, fill: card, stroke: edge, sw: 1 });
+
+          /* рельс: два шага пройдены, третий — текущий */
+          var segGap = 6, segW = (pw - segGap * 5) / 6;
+          for (var i = 0; i < 6; i++) {
+            var sx = px + i * (segW + segGap);
+            var done = i < 2, now = i === 2;
+            s += R(sx, cy + 26, segW, 4, { rx: 2, fill: done ? acc : now ? accLit : edge });
+          }
+          s += T(px, cy + 62, "ШАГ 3 ИЗ 6", { size: 11, fill: faint, mono: true, track: 1.2 })
+            + T(px + pw, cy + 62, "ОСТАЛОСЬ 3", { size: 11, fill: faint, mono: true, track: 1.2, anchor: "end" });
+
+          s += T(px, cy + 108, "Санузел трогаем?", { size: 24, weight: 700, fill: ink })
+            + T(px, cy + 134, "Самая дорогая комната на квадратный метр —", { size: 13, fill: faint })
+            + T(px, cy + 152, "гидроизоляция, плитка, разводка.", { size: 13, fill: faint });
 
           var opts = [
-            ["Косметическая", "Обои, покраска, полы", "от 6 900 ₽/м²", 0],
-            ["Капитальная", "Со сменой коммуникаций", "от 12 400 ₽/м²", 1],
-            ["Дизайнерская", "По проекту, с авторским надзором", "от 21 000 ₽/м²", 0],
-            ["Только санузел", "Плитка, сантехника, разводка", "от 94 000 ₽", 0]
+            ["Не трогаем", "Санузел остаётся как есть.", 0],
+            ["Один санузел", "Демонтаж, гидроизоляция, плитка, сантехника.", 1],
+            ["Два санузла", "Совмещённый и гостевой либо раздельный.", 0]
           ];
           opts.forEach(function (o, i) {
-            var y = b.y + 204 + i * 92;
-            var on = o[3];
-            s += R(b.x + 44, y, 636, 76, { rx: 12, fill: on ? "#f2f4fd" : "#fbfbfc" })
-              + R(b.x + 44, y, 636, 76, { rx: 12, stroke: on ? acc : "#e6e8ec", sw: on ? 2 : 1 })
-              + C(b.x + 80, y + 38, 12, { fill: "#fff", stroke: on ? acc : "#cfd3da", sw: on ? 2.4 : 1.6 });
-            if (on) s += C(b.x + 80, y + 38, 6, { fill: acc });
-            s += T(b.x + 112, y + 33, o[0], { size: 17, weight: 600, fill: ink })
-              + T(b.x + 112, y + 56, o[1], { size: 13.5, fill: mute })
-              + T(b.x + 656, y + 45, o[2], { size: 14, weight: 600, fill: on ? acc : "#6b7079", anchor: "end" });
+            var y = cy + 180 + i * 78, on = o[2];
+            s += R(px, y, pw, 68, { rx: 4, fill: on ? "rgba(234,88,12,.12)" : lift, stroke: on ? acc : edgeLit, sw: on ? 1.5 : 1 })
+              + C(px + 28, y + 27, 10, { fill: on ? acc : "none", stroke: on ? acc : edgeLit, sw: 1.5 });
+            if (on) s += P("M" + (px + 23) + " " + (y + 27) + "l4 5 9-11", { stroke: onAcc, sw: 2 });
+            s += T(px + 54, y + 31, o[0], { size: 15, weight: 600, fill: ink })
+              + T(px + 54, y + 51, o[1], { size: 12.5, fill: faint });
           });
 
-          /* кнопки шага */
-          s += R(b.x + 44, b.y + 584, 130, 50, { rx: 25, fill: "#fff", stroke: "#e0e3e8", sw: 1.5 })
-            + T(b.x + 109, b.y + 615, "Назад", { size: 15, fill: "#6b7079", anchor: "middle" })
-            + R(b.x + 190, b.y + 584, 178, 50, { rx: 25, fill: acc })
-            + T(b.x + 279, b.y + 615, "Дальше", { size: 15, weight: 600, fill: "#fff", anchor: "middle" });
+          /* цену и кнопки разносим по двум строкам — в одну строку
+             вилка с шестизначными числами упиралась в «Назад»      */
+          var fy = cy + 180 + 3 * 78 + 24;
+          s += R(px, fy, pw, 1, { fill: edge })
+            + T(px, fy + 34, "ПРЕДВАРИТЕЛЬНО", { size: 10.5, fill: faint, mono: true, track: 1.4 })
+            + T(px, fy + 62, "632 000 — 890 000 ₽", { size: 19, weight: 700, fill: accLit });
 
-          /* панель расчёта — она и есть продукт этой страницы */
-          var px = b.x + 716, py = b.y + 132;
-          s += R(px, py, 296, 424, { rx: 16, fill: "#f7f8fb" })
-            + R(px, py, 296, 424, { rx: 16, stroke: "#e6e8ec", sw: 1 })
-            + T(px + 26, py + 42, "ПРЕДВАРИТЕЛЬНО", { size: 11, fill: mute, mono: true, track: 1.6 })
-            + T(px + 26, py + 86, "480 000", { size: 32, weight: 700, fill: ink })
-            + T(px + 26, py + 118, "— 620 000 ₽", { size: 24, weight: 700, fill: acc })
-            + T(px + 26, py + 146, "за 54 м², под ключ", { size: 13, fill: mute })
-            + R(px + 26, py + 168, 244, 1, { fill: "#e6e8ec" });
-
-          var calc = [
-            ["Работы", "268 000 ₽"],
-            ["Материалы", "184 000 ₽"],
-            ["Санузел", "94 000 ₽"],
-            ["Вывоз мусора", "12 000 ₽"]
-          ];
-          calc.forEach(function (c, i) {
-            var y = py + 202 + i * 34;
-            s += T(px + 26, y, c[0], { size: 14, fill: "#5c6069" })
-              + T(px + 270, y, c[1], { size: 14, weight: 500, fill: ink, anchor: "end", mono: true });
-          });
-          s += R(px + 26, py + 352, 244, 46, { rx: 23, fill: ink })
-            + T(px + 148, py + 381, "Точный расчёт", { size: 14.5, weight: 600, fill: "#fff", anchor: "middle" })
-            + T(px + 148, py + 60, "", { size: 1 });
-
-          /* цифра меняется на глазах — подсказываем это движением */
-          s += R(px + 196, py + 24, 76, 26, { rx: 13, fill: acc, opacity: 0.12 })
-            + T(px + 234, py + 42, "+18 000", { size: 12, weight: 600, fill: acc, anchor: "middle", mono: true });
+          var by = fy + 84;
+          s += R(px + pw - 232, by, 96, 44, { rx: 4, stroke: edgeLit, sw: 1 })
+            + T(px + pw - 184, by + 26, "Назад", { size: 13, fill: soft, anchor: "middle" })
+            + R(px + pw - 126, by, 126, 44, { rx: 4, fill: acc })
+            + T(px + pw - 63, by + 26, "Далее →", { size: 13, weight: 700, fill: onAcc, anchor: "middle" });
 
           return { defs: "", body: b.clip + b.frame + '<g clip-path="url(#cl-q)">' + s + "</g>" };
         }
