@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ТИШИНА — студия массажа | Демо-проект D.PUCHENKOV</title>
+
+<!-- Страница намеренно закрыта от индексации. Студия вымышленная:
+     если бы демо ранжировалось по запросу «массаж», человек искал
+     бы услугу и попал на несуществующую студию. Плашка сверху
+     говорит о том же прямо, для тех кто пришёл по ссылке. -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Демонстрационный лендинг из портфолио D.PUCHENKOV: одностраничник студии массажа с записью онлайн.">
+<meta name="theme-color" content="#f6f2ec">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%233c6b5d'/%3E%3Ctext x='32' y='43' font-family='system-ui,sans-serif' font-size='30' font-weight='600' fill='%23f6f2ec' text-anchor='middle'%3E%D0%A2%3C/text%3E%3C/svg%3E">
+
+<style>
+  /* ═══════════════════════════════════════════════════════════
+     ТИШИНА · лендинг студии массажа
+     Демо-работа для портфолио. Всё нативно: ни одной внешней
+     библиотеки, ни одного сетевого запроса. Эффекты, которые
+     обычно тянут из React-наборов (наклон карточек за курсором,
+     aurora-фон, шиммер, счётчики, бегущие ленты), написаны
+     здесь руками — страница остаётся одним файлом и открывается
+     даже без сети.
+     ═══════════════════════════════════════════════════════════ */
+
+  :root {
+    --sand:      #f6f2ec;
+    --sand-deep: #ede6dc;
+    --paper:     #fffdfa;
+    --ink:       #241f1b;
+    --ink-soft:  #5f574e;
+    --mute:      #938979;
+    --line:      #e2d9cc;
+    --acc:       #3c6b5d;
+    --acc-soft:  #5e9384;
+    --acc-pale:  rgba(60, 107, 93, 0.09);
+    --clay:      #b4795a;
+    --dark:      #16120f;
+    --dark-lift: #211b16;
+
+    --serif: "Georgia", "Times New Roman", serif;
+    --face: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display",
+            "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, Menlo, monospace;
+
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --gut: clamp(20px, 5vw, 80px);
+    --demo-h: 38px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--sand);
+    color: var(--ink);
+    font-family: var(--face);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  a { color: inherit; text-decoration: none; }
+  img { display: block; max-width: 100%; }
+
+  :focus-visible {
+    outline: 2px solid var(--acc);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .shell {
+    width: 100%;
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 var(--gut);
+  }
+
+  /* ── плашка: это демо, а не настоящая студия ──────────────── */
+  .demo-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 200;
+    height: var(--demo-h);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 16px;
+    background: var(--dark);
+    color: #cfc7bb;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    text-align: center;
+  }
+  .demo-bar b { color: #fff; font-weight: 500; }
+  .demo-bar a {
+    color: #8fd0bd;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    white-space: nowrap;
+  }
+  @media (max-width: 700px) {
+    .demo-bar { font-size: 10.5px; line-height: 1.3; height: auto; padding: 8px 12px; gap: 6px; flex-wrap: wrap; }
+    /* длинное пояснение съедает третью строку и подпирает шапку —
+       на узком экране оставляем только суть */
+    .demo-bar .long { display: none; }
+    :root { --demo-h: 52px; }
+  }
+
+  /* ── шапка ────────────────────────────────────────────────── */
+  .nav {
+    position: fixed;
+    top: var(--demo-h); left: 0; right: 0;
+    z-index: 150;
+    transition: background 0.5s var(--ease), border-color 0.5s var(--ease),
+                backdrop-filter 0.5s var(--ease);
+    border-bottom: 1px solid transparent;
+  }
+  .nav.stuck {
+    background: rgba(246, 242, 236, 0.82);
+    backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    border-bottom-color: var(--line);
+  }
+  .nav-in {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    height: 76px;
+  }
+  .brand {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 0.34em;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+  .brand::before {
+    content: "";
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--acc);
+    box-shadow: 0 0 0 4px var(--acc-pale);
+    animation: pulse 3.4s var(--ease) infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--acc-pale); }
+    50%      { box-shadow: 0 0 0 9px rgba(60, 107, 93, 0.05); }
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 34px;
+    font-size: 14.5px;
+    color: var(--ink-soft);
+  }
+  .nav-links a { position: relative; padding: 6px 0; transition: color 0.35s var(--ease); }
+  .nav-links a::after {
+    content: "";
+    position: absolute;
+    left: 0; bottom: 0;
+    width: 100%; height: 1px;
+    background: var(--acc);
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.45s var(--ease);
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-links a:hover::after { transform: scaleX(1); transform-origin: left; }
+  @media (max-width: 900px) { .nav-links { display: none; } }
+
+  /* ── кнопки ───────────────────────────────────────────────── */
+  .btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 54px;
+    padding: 0 30px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--acc);
+    color: #f6f2ec;
+    font-family: inherit;
+    font-size: 15.5px;
+    font-weight: 600;
+    cursor: pointer;
+    overflow: hidden;
+    isolation: isolate;
+    transition: transform 0.4s var(--ease), box-shadow 0.4s var(--ease);
+    box-shadow: 0 12px 30px -12px rgba(60, 107, 93, 0.7);
+  }
+  /* шиммер: блик пробегает по кнопке, не перекрашивая её */
+  .btn::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(115deg,
+      transparent 30%, rgba(255,255,255,0.28) 46%, transparent 62%);
+    transform: translateX(-120%);
+    animation: shimmer 4.6s var(--ease) infinite;
+  }
+  @keyframes shimmer { 0%, 55% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 18px 40px -12px rgba(60, 107, 93, 0.85); }
+  .btn:active { transform: translateY(0) scale(0.985); }
+  .btn svg { transition: transform 0.4s var(--ease); }
+  .btn:hover svg { transform: translateX(3px); }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: 54px;
+    padding: 0 26px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.4s var(--ease), background 0.4s var(--ease),
+                transform 0.4s var(--ease);
+  }
+  .btn-ghost:hover { border-color: var(--acc); background: var(--acc-pale); transform: translateY(-2px); }
+
+  /* ── появление при прокрутке ──────────────────────────────── */
+  .rise {
+    opacity: 0;
+    transform: translateY(34px);
+    transition: opacity 1s var(--ease), transform 1s var(--ease);
+  }
+  .rise.in { opacity: 1; transform: none; }
+  .d1 { transition-delay: 0.09s; }
+  .d2 { transition-delay: 0.18s; }
+  .d3 { transition-delay: 0.27s; }
+  .d4 { transition-delay: 0.36s; }
+  @media (prefers-reduced-motion: reduce) {
+    .rise { opacity: 1; transform: none; transition: none; }
+  }
+
+  /* ── ГЕРОЙ ────────────────────────────────────────────────── */
+  .hero {
+    position: relative;
+    padding: calc(var(--demo-h) + 130px) 0 clamp(70px, 9vw, 130px);
+    overflow: hidden;
+  }
+  /* aurora: мягкие цветные пятна, медленно плывущие за фоном.
+     Blur держим на небольших элементах — так дешевле для GPU,
+     чем размывать полотно во всю ширину. */
+  .aurora { position: absolute; inset: -20% -10%; z-index: 0; pointer-events: none; filter: blur(70px); opacity: 0.75; }
+  .blob { position: absolute; border-radius: 50%; will-change: transform; }
+  .blob-1 { width: 46vw; height: 46vw; left: -6%; top: -8%; background: radial-gradient(circle, rgba(94,147,132,0.5), transparent 68%); animation: drift1 24s ease-in-out infinite; }
+  .blob-2 { width: 40vw; height: 40vw; right: -4%; top: 6%; background: radial-gradient(circle, rgba(180,121,90,0.42), transparent 68%); animation: drift2 30s ease-in-out infinite; }
+  .blob-3 { width: 34vw; height: 34vw; left: 34%; bottom: -14%; background: radial-gradient(circle, rgba(60,107,93,0.3), transparent 70%); animation: drift3 27s ease-in-out infinite; }
+  @keyframes drift1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(6%, 8%) scale(1.14); } }
+  @keyframes drift2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-8%, 6%) scale(1.1); } }
+  @keyframes drift3 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-5%, -9%) scale(1.18); } }
+  @media (prefers-reduced-motion: reduce) { .blob { animation: none; } }
+
+  .hero-grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: clamp(36px, 5vw, 76px);
+    align-items: center;
+  }
+  @media (max-width: 940px) { .hero-grid { grid-template-columns: 1fr; } }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 16px 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255, 253, 250, 0.7);
+    backdrop-filter: blur(8px);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 26px;
+  }
+  .eyebrow i {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--acc);
+    font-style: normal;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(42px, 6.4vw, 84px);
+    font-weight: 400;
+    line-height: 1.03;
+    letter-spacing: -0.028em;
+    margin: 0 0 26px;
+  }
+  h1 em {
+    font-style: italic;
+    /* мягкий перелив по градиенту — тот же приём, что у «shiny text» */
+    background: linear-gradient(100deg, var(--acc) 0%, var(--clay) 42%, var(--acc) 78%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: sweep 7s linear infinite;
+  }
+  @keyframes sweep { to { background-position: -220% 0; } }
+  @media (prefers-reduced-motion: reduce) { h1 em { animation: none; } }
+
+  .lede {
+    font-size: clamp(16.5px, 1.7vw, 19px);
+    line-height: 1.62;
+    color: var(--ink-soft);
+    max-width: 46ch;
+    margin: 0 0 36px;
+  }
+  .hero-cta { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .hero-note {
+    display: flex; align-items: center; gap: 9px;
+    margin-top: 26px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--mute);
+  }
+
+  /* карточка героя: наклоняется за курсором, слои внутри
+     разъезжаются по глубине — весь 3D на CSS-перспективе */
+  .tilt-wrap { perspective: 1100px; }
+  .hero-card {
+    position: relative;
+    aspect-ratio: 4 / 5;
+    border-radius: 22px;
+    overflow: hidden;
+    background: linear-gradient(150deg, #c8a288, #a87f66 48%, #6d5344);
+    box-shadow: 0 40px 90px -30px rgba(36, 31, 27, 0.55);
+    transform-style: preserve-3d;
+    transition: transform 0.5s var(--ease);
+    will-change: transform;
+  }
+  .hero-card::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(600px circle at var(--mx, 50%) var(--my, 50%),
+                rgba(255,255,255,0.22), transparent 42%);
+    opacity: 0;
+    transition: opacity 0.4s var(--ease);
+  }
+  .hero-card:hover::after { opacity: 1; }
+  .hc-glow {
+    position: absolute;
+    width: 62%; aspect-ratio: 1;
+    left: 50%; top: 46%;
+    transform: translate(-50%, -50%) translateZ(30px);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.16);
+    filter: blur(2px);
+  }
+  .hc-badge {
+    position: absolute;
+    left: 22px; bottom: 22px; right: 22px;
+    transform: translateZ(56px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 15px 18px;
+    border-radius: 14px;
+    background: rgba(255, 253, 250, 0.9);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 14px 34px -14px rgba(36,31,27,0.5);
+  }
+  .hc-badge b { display: block; font-size: 15.5px; }
+  .hc-badge span { display: block; font-size: 12.5px; color: var(--mute); margin-top: 2px; }
+  .hc-price { font-family: var(--serif); font-size: 22px; color: var(--acc); white-space: nowrap; }
+  /* свободные окна: ближний слой, поэтому при наклоне уезжает
+     заметнее фона — этим и читается объём */
+  .hc-slots {
+    position: absolute;
+    left: 22px; right: 22px; top: 74px;
+    transform: translateZ(44px);
+    display: flex; flex-wrap: wrap; gap: 7px;
+  }
+  .hc-slots span {
+    padding: 7px 13px;
+    border-radius: 999px;
+    background: rgba(255, 253, 250, 0.86);
+    backdrop-filter: blur(6px);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink);
+  }
+  .hc-slots .busy {
+    background: rgba(22, 18, 15, 0.28);
+    color: rgba(255, 253, 250, 0.62);
+    text-decoration: line-through;
+  }
+  .hc-quote {
+    position: absolute;
+    left: 22px; right: 22px; bottom: 108px;
+    transform: translateZ(24px);
+    font-family: var(--serif);
+    font-size: 17px;
+    font-style: italic;
+    line-height: 1.45;
+    color: rgba(255, 253, 250, 0.94);
+    text-shadow: 0 2px 14px rgba(36, 31, 27, 0.45);
+  }
+  .hc-chip {
+    position: absolute;
+    top: 20px; right: 20px;
+    transform: translateZ(40px);
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(22, 18, 15, 0.62);
+    backdrop-filter: blur(8px);
+    color: #f6f2ec;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+  }
+
+  /* ── бегущая лента ────────────────────────────────────────── */
+  .marquee {
+    position: relative;
+    display: flex;
+    gap: 0;
+    overflow: hidden;
+    padding: 22px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+  }
+  .mq-row { display: flex; flex: none; gap: 46px; padding-right: 46px; animation: slide 34s linear infinite; }
+  @keyframes slide { to { transform: translateX(-100%); } }
+  .marquee:hover .mq-row { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) { .mq-row { animation: none; } }
+  .mq-item {
+    display: flex; align-items: center; gap: 13px;
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .mq-item::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--acc); flex: none; }
+
+  /* ── секции ───────────────────────────────────────────────── */
+  section { position: relative; }
+  .band { padding: clamp(72px, 9vw, 130px) 0; }
+  .cap {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--acc);
+    margin: 0 0 18px;
+  }
+  .cap::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  h2 {
+    font-family: var(--serif);
+    font-size: clamp(30px, 4.4vw, 52px);
+    font-weight: 400;
+    letter-spacing: -0.022em;
+    line-height: 1.1;
+    margin: 0 0 16px;
+    max-width: 20ch;
+  }
+  .band-note { font-size: 16.5px; color: var(--ink-soft); max-width: 52ch; margin: 0 0 46px; line-height: 1.6; }
+
+  /* ── бенто-сетка услуг ────────────────────────────────────── */
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 900px) { .bento { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 620px) { .bento { grid-template-columns: 1fr; } }
+
+  .tile {
+    position: relative;
+    padding: 30px 28px 32px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--paper);
+    overflow: hidden;
+    transition: transform 0.5s var(--ease), box-shadow 0.5s var(--ease),
+                border-color 0.5s var(--ease);
+    transform-style: preserve-3d;
+    will-change: transform;
+  }
+  /* пятно света идёт за курсором — «spotlight card» */
+  .tile::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%),
+                rgba(60, 107, 93, 0.1), transparent 45%);
+    opacity: 0;
+    transition: opacity 0.45s var(--ease);
+    pointer-events: none;
+  }
+  .tile:hover { border-color: rgba(60,107,93,0.35); box-shadow: 0 26px 54px -28px rgba(36,31,27,0.4); }
+  .tile:hover::before { opacity: 1; }
+  .tile.wide { grid-column: span 2; }
+  @media (max-width: 620px) { .tile.wide { grid-column: span 1; } }
+
+  .tile-ico {
+    width: 46px; height: 46px;
+    display: grid; place-items: center;
+    border-radius: 13px;
+    background: var(--acc-pale);
+    color: var(--acc);
+    margin-bottom: 20px;
+  }
+  .tile h3 { font-size: 19.5px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 9px; }
+  .tile p { font-size: 15px; line-height: 1.6; color: var(--ink-soft); margin: 0 0 18px; }
+  .tile-meta {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--mute);
+  }
+  .tile-meta b { font-family: var(--face); font-size: 17px; color: var(--acc); font-weight: 600; }
+
+  /* тёмная плитка-акцент внутри сетки */
+  .tile.dark {
+    background: var(--dark);
+    border-color: #2c241d;
+    color: #efe8de;
+  }
+  .tile.dark h3 { color: #fff; }
+  .tile.dark p { color: #b3a89a; }
+  .tile.dark .tile-ico { background: rgba(143, 208, 189, 0.14); color: #8fd0bd; }
+  .tile.dark .tile-meta { border-color: #2c241d; color: #8a7e70; }
+  .tile.dark .tile-meta b { color: #8fd0bd; }
+  .tile.dark::before { background: radial-gradient(420px circle at var(--mx,50%) var(--my,50%), rgba(143,208,189,0.13), transparent 45%); }
+
+  /* ── как проходит: залипающая колонка ─────────────────────── */
+  .flow-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(30px, 5vw, 80px); align-items: start; }
+  @media (max-width: 940px) { .flow-grid { grid-template-columns: 1fr; } }
+  .flow-stick { position: sticky; top: calc(var(--demo-h) + 110px); }
+  @media (max-width: 940px) { .flow-stick { position: static; } }
+  .steps { display: flex; flex-direction: column; gap: 14px; }
+  .step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 54px 1fr;
+    gap: 20px;
+    padding: 26px 26px 28px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--paper);
+    transition: border-color 0.5s var(--ease), transform 0.5s var(--ease);
+  }
+  .step:hover { border-color: rgba(60,107,93,0.4); transform: translateX(5px); }
+  .step-n {
+    width: 46px; height: 46px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    border: 1px solid var(--acc);
+    color: var(--acc);
+    font-family: var(--serif);
+    font-size: 19px;
+  }
+  .step h3 { font-size: 18.5px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .step p { font-size: 15px; line-height: 1.6; color: var(--ink-soft); margin: 0; }
+
+  /* ── счётчики ─────────────────────────────────────────────── */
+  .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  @media (max-width: 760px) { .nums { grid-template-columns: repeat(2, 1fr); } }
+  .num { background: var(--paper); padding: 30px 26px 32px; text-align: center; }
+  .num b {
+    display: block;
+    font-family: var(--serif);
+    font-size: clamp(32px, 4vw, 46px);
+    font-weight: 400;
+    color: var(--acc);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .num span { display: block; margin-top: 12px; font-size: 13.5px; color: var(--ink-soft); line-height: 1.4; }
+
+  /* ── ЦЕНЫ: тёмная секция ──────────────────────────────────── */
+  .dark-band { background: var(--dark); color: #efe8de; overflow: hidden; }
+  .dark-band .cap { color: #8fd0bd; }
+  .dark-band .cap::after { background: #2c241d; }
+  .dark-band h2 { color: #fff; }
+  .dark-band .band-note { color: #b3a89a; }
+  .dark-glow { position: absolute; width: 60vw; height: 60vw; right: -20%; top: -30%; background: radial-gradient(circle, rgba(60,107,93,0.42), transparent 65%); filter: blur(80px); pointer-events: none; }
+
+  .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; position: relative; z-index: 1; }
+  @media (max-width: 900px) { .plans { grid-template-columns: 1fr; max-width: 460px; } }
+  .plan {
+    position: relative;
+    padding: 32px 30px 34px;
+    border: 1px solid #2c241d;
+    border-radius: 18px;
+    background: var(--dark-lift);
+    overflow: hidden;
+    transition: transform 0.5s var(--ease), border-color 0.5s var(--ease);
+  }
+  .plan::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(400px circle at var(--mx,50%) var(--my,50%), rgba(143,208,189,0.12), transparent 45%);
+    opacity: 0; transition: opacity 0.45s var(--ease); pointer-events: none;
+  }
+  .plan:hover { transform: translateY(-5px); border-color: rgba(143,208,189,0.4); }
+  .plan:hover::before { opacity: 1; }
+  .plan.pick { border-color: var(--acc-soft); background: linear-gradient(180deg, rgba(94,147,132,0.14), var(--dark-lift) 40%); }
+  .plan-tag {
+    position: absolute; top: 18px; right: 18px;
+    padding: 5px 12px; border-radius: 999px;
+    background: var(--acc-soft); color: #0f1512;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .plan h3 { font-size: 18px; font-weight: 600; margin: 0 0 6px; color: #fff; }
+  .plan-dur { font-family: var(--mono); font-size: 12.5px; color: #8a7e70; }
+  .plan-price { font-family: var(--serif); font-size: 42px; color: #8fd0bd; margin: 20px 0 4px; line-height: 1; }
+  .plan-price small { font-size: 16px; color: #8a7e70; font-family: var(--face); }
+  .plan ul { list-style: none; margin: 22px 0 26px; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+  .plan li { position: relative; padding-left: 26px; font-size: 14.5px; color: #b3a89a; line-height: 1.45; }
+  .plan li::before {
+    content: ""; position: absolute; left: 0; top: 6px;
+    width: 15px; height: 8px;
+    border-left: 1.6px solid var(--acc-soft); border-bottom: 1.6px solid var(--acc-soft);
+    transform: rotate(-45deg);
+  }
+  .plan .btn { width: 100%; }
+  .plan-ghost {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 54px;
+    border: 1px solid #3a3129; border-radius: 999px;
+    color: #efe8de; font-size: 15px; font-weight: 500; cursor: pointer;
+    background: transparent; font-family: inherit;
+    transition: border-color 0.4s var(--ease), background 0.4s var(--ease);
+  }
+  .plan-ghost:hover { border-color: var(--acc-soft); background: rgba(143,208,189,0.08); }
+
+  /* ── отзывы: две встречные ленты ──────────────────────────── */
+  .revs { display: flex; flex-direction: column; gap: 16px; overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
+  /* Дорожка задаёт направление строки: копию ленты скрипт кладёт
+     именно сюда, иначе она встанет новой строкой под первой. */
+  .rev-track { display: flex; overflow: hidden; }
+  .rev-row { display: flex; flex: none; gap: 16px; padding-right: 16px; align-items: stretch; }
+  .rev-row.a { animation: slide 46s linear infinite; }
+  .rev-row.b { animation: slide 54s linear infinite reverse; }
+  .revs:hover .rev-row { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) { .rev-row { animation: none; } }
+  .rev {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    width: min(360px, 78vw);
+    padding: 24px 26px 26px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--paper);
+  }
+  .rev-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .rev-av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+    font-weight: 600; font-size: 15px; color: #fff; flex: none; }
+  .rev-top b { display: block; font-size: 14.5px; }
+  .rev-top span { display: block; font-size: 12px; color: var(--mute); margin-top: 1px; }
+  .rev p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+  .stars { display: flex; gap: 2px; margin-bottom: 10px; color: #d9a441; }
+
+  /* ── FAQ ──────────────────────────────────────────────────── */
+  .faq { max-width: 780px; margin: 0 auto; border-top: 1px solid var(--line); }
+  .qa { border-bottom: 1px solid var(--line); }
+  .qa-q {
+    width: 100%;
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    padding: 24px 4px;
+    background: none; border: 0;
+    font-family: inherit; font-size: 17px; font-weight: 500; text-align: left;
+    color: var(--ink); cursor: pointer;
+    transition: color 0.35s var(--ease);
+  }
+  .qa-q:hover { color: var(--acc); }
+  .qa-ico { flex: none; width: 22px; height: 22px; position: relative; }
+  .qa-ico::before, .qa-ico::after {
+    content: ""; position: absolute; left: 50%; top: 50%;
+    background: var(--acc); transition: transform 0.45s var(--ease);
+  }
+  .qa-ico::before { width: 14px; height: 1.6px; transform: translate(-50%, -50%); }
+  .qa-ico::after { width: 1.6px; height: 14px; transform: translate(-50%, -50%); }
+  .qa[open] .qa-ico::after { transform: translate(-50%, -50%) rotate(90deg); }
+  .qa-a { overflow: hidden; max-height: 0; transition: max-height 0.5s var(--ease); }
+  .qa-a p { margin: 0 0 24px; padding-right: 40px; font-size: 15.5px; line-height: 1.65; color: var(--ink-soft); }
+
+  /* ── запись ───────────────────────────────────────────────── */
+  .book-wrap {
+    position: relative;
+    border-radius: 26px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #3c6b5d, #2b5145 52%, #1d3a31);
+    color: #eef5f2;
+    padding: clamp(38px, 5.5vw, 72px);
+  }
+  .book-wrap::before {
+    content: ""; position: absolute; width: 50%; aspect-ratio: 1; right: -8%; top: -30%;
+    background: radial-gradient(circle, rgba(180,121,90,0.5), transparent 62%);
+    filter: blur(60px);
+  }
+  .book-grid { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,0.85fr); gap: clamp(30px,4vw,60px); align-items: center; }
+  @media (max-width: 880px) { .book-grid { grid-template-columns: 1fr; } }
+  .book-grid h2 { color: #fff; margin-bottom: 14px; }
+  .book-grid p { color: rgba(238,245,242,0.78); font-size: 16.5px; line-height: 1.6; margin: 0 0 28px; max-width: 40ch; }
+  .book-pts { display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
+  .book-pt { display: flex; align-items: center; gap: 12px; font-size: 15px; color: rgba(238,245,242,0.9); }
+  .book-pt i { width: 22px; height: 22px; flex: none; border-radius: 50%; background: rgba(255,255,255,0.16); display: grid; place-items: center; font-style: normal; }
+
+  .form { background: rgba(255,253,250,0.97); border-radius: 18px; padding: 30px 28px 32px; box-shadow: 0 30px 70px -30px rgba(0,0,0,0.5); }
+  .form h3 { margin: 0 0 4px; font-size: 20px; font-weight: 600; color: var(--ink); }
+  .form > p { margin: 0 0 22px; font-size: 13.5px; color: var(--mute); }
+  .field { margin-bottom: 15px; }
+  .field label { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mute); margin-bottom: 7px; }
+  .field input, .field select {
+    width: 100%; height: 48px; padding: 0 15px;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--sand); color: var(--ink);
+    font-family: inherit; font-size: 15px;
+    transition: border-color 0.35s var(--ease), background 0.35s var(--ease);
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--acc); background: #fff; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    padding: 9px 15px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--sand); font-family: inherit; font-size: 13.5px; color: var(--ink-soft);
+    cursor: pointer; transition: all 0.3s var(--ease);
+  }
+  .chip[aria-pressed="true"] { background: var(--acc); border-color: var(--acc); color: #fff; }
+  .form .btn { width: 100%; margin-top: 8px; }
+  .form-fine { margin: 14px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--mute); text-align: center; }
+
+  /* ── подвал ───────────────────────────────────────────────── */
+  footer { padding: 60px 0 40px; border-top: 1px solid var(--line); }
+  .foot { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between; }
+  .foot-b { font-size: 17px; font-weight: 700; letter-spacing: 0.3em; }
+  .foot-links { display: flex; flex-wrap: wrap; gap: 24px; font-size: 14px; color: var(--ink-soft); }
+  .foot-note { width: 100%; margin: 30px 0 0; padding-top: 24px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--mute); }
+  .foot-note a { color: var(--acc); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* прогресс прокрутки страницы */
+  .prog { position: fixed; top: var(--demo-h); left: 0; height: 2px; background: var(--acc); z-index: 160; width: 0; transition: width 0.1s linear; }
+</style>
+</head>
+<body>
+
+<!-- честная плашка: страница выглядит как настоящий сайт студии,
+     и человек должен сразу понимать, что записаться тут нельзя -->
+<div class="demo-bar">
+  <span><b>Демонстрационный проект</b><span class="long"> — студия вымышленная, запись не работает</span></span>
+  <a href="https://puchenkoff.ru/">К портфолио D.PUCHENKOV →</a>
+</div>
+
+<div class="prog" id="prog"></div>
+
+<header class="nav" id="nav">
+  <div class="shell nav-in">
+    <a class="brand" href="#top">ТИШИНА</a>
+    <nav class="nav-links">
+      <a href="#uslugi">Услуги</a>
+      <a href="#kak">Как проходит</a>
+      <a href="#ceny">Цены</a>
+      <a href="#otzyvy">Отзывы</a>
+      <a href="#vopros">Вопросы</a>
+    </nav>
+    <a class="btn" href="#zapis" style="height:46px;padding:0 24px;font-size:14.5px">
+      Записаться
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+        <path d="M2.5 6.5h8M7 3l3.5 3.5L7 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ── ГЕРОЙ ─────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="aurora" aria-hidden="true">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+    </div>
+
+    <div class="shell hero-grid">
+      <div>
+        <p class="eyebrow rise"><i></i> Массаж в центре города</p>
+        <h1 class="rise d1">Массаж, после которого хочется <em>молчать</em></h1>
+        <p class="lede rise d2">Спина, шея, ноги. Шестьдесят или девяносто минут тишины — без абонементов, без навязанных курсов и без разговоров, если вам не хочется говорить.</p>
+        <div class="hero-cta rise d3">
+          <a class="btn" href="#zapis">
+            Записаться онлайн
+            <svg width="14" height="14" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+              <path d="M2.5 6.5h8M7 3l3.5 3.5L7 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+          <a class="btn-ghost" href="#ceny">Посмотреть цены</a>
+        </div>
+        <p class="hero-note rise d4">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M8 4.6V8l2.3 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+          Ответим в Telegram за 15 минут
+        </p>
+      </div>
+
+      <div class="tilt-wrap rise d2">
+        <div class="hero-card" data-tilt>
+          <div class="hc-glow"></div>
+          <div class="hc-chip">СЕГОДНЯ СВОБОДНО</div>
+          <div class="hc-slots">
+            <span>18:30</span><span>19:00</span><span class="busy">20:00</span><span>21:00</span>
+          </div>
+          <div class="hc-quote">«Тихий кабинет и никаких разговоров, если не хочется»</div>
+          <div class="hc-badge">
+            <div>
+              <b>Классический массаж</b>
+              <span>60 минут · мастер Ирина</span>
+            </div>
+            <div class="hc-price">3 200 ₽</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ЛЕНТА ─────────────────────────────────────────────── -->
+  <div class="marquee" aria-hidden="true">
+    <div class="mq-row" data-mq>
+      <span class="mq-item">Без абонементов</span>
+      <span class="mq-item">Мастера с медицинским образованием</span>
+      <span class="mq-item">Тихие кабинеты</span>
+      <span class="mq-item">Онлайн-запись за минуту</span>
+      <span class="mq-item">Гибкое расписание до 22:00</span>
+      <span class="mq-item">Своя парковка</span>
+    </div>
+  </div>
+
+  <!-- ── УСЛУГИ ────────────────────────────────────────────── -->
+  <section class="band" id="uslugi">
+    <div class="shell">
+      <p class="cap rise">Услуги</p>
+      <h2 class="rise d1">Четыре программы, ни одной лишней</h2>
+      <p class="band-note rise d2">Мы не продаём курсы из десяти сеансов. Приходите когда болит спина или просто нужно выключиться на час.</p>
+
+      <div class="bento">
+        <article class="tile wide rise" data-spot data-tilt-soft>
+          <div class="tile-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 15c2-5 5-8 8-8s6 3 8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <circle cx="12" cy="17.5" r="2.2" stroke="currentColor" stroke-width="1.6"/>
+            </svg>
+          </div>
+          <h3>Классический массаж</h3>
+          <p>Спина, шея, плечи. Снимает зажимы после рабочей недели за компьютером. Самая частая причина, по которой к нам приходят в первый раз.</p>
+          <div class="tile-meta"><span>60 / 90 минут</span><b>от 3 200 ₽</b></div>
+        </article>
+
+        <article class="tile rise d1" data-spot data-tilt-soft>
+          <div class="tile-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3v18M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h3>Спортивный</h3>
+          <p>Глубокая проработка после нагрузок. Для тех, кто бегает, ходит в зал или таскает тяжести.</p>
+          <div class="tile-meta"><span>90 минут</span><b>4 600 ₽</b></div>
+        </article>
+
+        <article class="tile rise d2" data-spot data-tilt-soft>
+          <div class="tile-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M5.5 20c1-3.6 3.5-5.4 6.5-5.4s5.5 1.8 6.5 5.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h3>Шейно-воротниковый</h3>
+          <p>Короткий сеанс для головы и шеи. Помещается в обеденный перерыв.</p>
+          <div class="tile-meta"><span>30 минут</span><b>1 900 ₽</b></div>
+        </article>
+
+        <article class="tile dark wide rise d1" data-spot data-tilt-soft>
+          <div class="tile-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 4c3.5 2 5.5 4.6 5.5 8a5.5 5.5 0 1 1-11 0c0-3.4 2-6 5.5-8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h3>Расслабляющий с маслами</h3>
+          <p>Медленный ритм, тёплое масло, приглушённый свет. Если цель не «размять», а выдохнуть и уснуть прямо на кушетке — вам сюда.</p>
+          <div class="tile-meta"><span>90 минут · чай после сеанса</span><b>4 900 ₽</b></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── КАК ПРОХОДИТ ──────────────────────────────────────── -->
+  <section class="band" id="kak" style="background:var(--sand-deep)">
+    <div class="shell flow-grid">
+      <div class="flow-stick">
+        <p class="cap rise">Как проходит</p>
+        <h2 class="rise d1">Первый визит без сюрпризов</h2>
+        <p class="band-note rise d2">Рассказываем заранее, чтобы вы не гадали, что вас ждёт и сколько это займёт.</p>
+        <a class="btn rise d3" href="#zapis">
+          Выбрать время
+          <svg width="14" height="14" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+            <path d="M2.5 6.5h8M7 3l3.5 3.5L7 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+      </div>
+
+      <div class="steps">
+        <div class="step rise"><div class="step-n">1</div><div><h3>Записываетесь онлайн</h3><p>Выбираете услугу, день и время. Подтверждение приходит в Telegram сразу, без звонка администратора.</p></div></div>
+        <div class="step rise d1"><div class="step-n">2</div><div><h3>Короткий разговор перед сеансом</h3><p>Мастер спрашивает, где болит и есть ли противопоказания. Две минуты, не анкета на двадцать пунктов.</p></div></div>
+        <div class="step rise d2"><div class="step-n">3</div><div><h3>Сам сеанс</h3><p>Тихий кабинет, тёплая кушетка. Хотите молчать — молчим. Хотите другое давление — говорите в любой момент.</p></div></div>
+        <div class="step rise d3"><div class="step-n">4</div><div><h3>Чай и рекомендации</h3><p>После сеанса — десять минут в тишине. Мастер скажет, что делать дома и когда имеет смысл прийти снова.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ЦИФРЫ ─────────────────────────────────────────────── -->
+  <section class="band" style="padding-top:0">
+    <div class="shell">
+      <div class="nums rise">
+        <div class="num"><b data-count="8" data-suffix="">0</b><span>лет студии</span></div>
+        <div class="num"><b data-count="6" data-suffix="">0</b><span>мастеров в команде</span></div>
+        <div class="num"><b data-count="12400" data-suffix="+">0</b><span>сеансов проведено</span></div>
+        <div class="num"><b data-count="94" data-suffix="%">0</b><span>возвращаются снова</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ЦЕНЫ ──────────────────────────────────────────────── -->
+  <section class="band dark-band" id="ceny">
+    <div class="dark-glow" aria-hidden="true"></div>
+    <div class="shell" style="position:relative;z-index:1">
+      <p class="cap rise">Цены</p>
+      <h2 class="rise d1">Стоимость известна до записи</h2>
+      <p class="band-note rise d2">Никаких «уточним на месте». Цена в прайсе — та, которую вы заплатите на выходе.</p>
+
+      <div class="plans">
+        <article class="plan rise" data-spot>
+          <h3>Разовый сеанс</h3>
+          <p class="plan-dur">60 минут</p>
+          <p class="plan-price">3 200 <small>₽</small></p>
+          <ul>
+            <li>Любая программа на выбор</li>
+            <li>Консультация мастера</li>
+            <li>Чай после сеанса</li>
+          </ul>
+          <button class="plan-ghost" data-book>Записаться</button>
+        </article>
+
+        <article class="plan pick rise d1" data-spot>
+          <span class="plan-tag">Выбирают чаще</span>
+          <h3>Продлённый</h3>
+          <p class="plan-dur">90 минут</p>
+          <p class="plan-price">4 600 <small>₽</small></p>
+          <ul>
+            <li>Полная проработка спины и ног</li>
+            <li>Тёплое масло по желанию</li>
+            <li>Разбор осанки и рекомендации</li>
+            <li>Чай после сеанса</li>
+          </ul>
+          <button class="btn" data-book>Записаться</button>
+        </article>
+
+        <article class="plan rise d2" data-spot>
+          <h3>Экспресс</h3>
+          <p class="plan-dur">30 минут</p>
+          <p class="plan-price">1 900 <small>₽</small></p>
+          <ul>
+            <li>Шея, воротниковая зона</li>
+            <li>Без переодевания</li>
+            <li>Помещается в перерыв</li>
+          </ul>
+          <button class="plan-ghost" data-book>Записаться</button>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ОТЗЫВЫ ────────────────────────────────────────────── -->
+  <section class="band" id="otzyvy">
+    <div class="shell">
+      <p class="cap rise">Отзывы</p>
+      <h2 class="rise d1">Что говорят после сеанса</h2>
+      <p class="band-note rise d2">Собрано из карточки студии на картах и из личных сообщений.</p>
+    </div>
+
+    <div class="revs" aria-hidden="true">
+      <div class="rev-track"><div class="rev-row a" data-mq>
+        <article class="rev"><div class="rev-top"><div class="rev-av" style="background:#3c6b5d">А</div><div><b>Анна К.</b><span>Спортивный, 90 минут</span></div></div><div class="stars">★★★★★</div><p>Первый раз за полгода уснула без телефона. Ирина сразу нашла, где зажим, и ничего не пришлось объяснять дважды.</p></article>
+        <article class="rev"><div class="rev-top"><div class="rev-av" style="background:#b4795a">Д</div><div><b>Дмитрий</b><span>Классический, 60 минут</span></div></div><div class="stars">★★★★★</div><p>Записался в 11 вечера через сайт, в 11:04 пришло подтверждение. Утром пришёл — всё как договорились, никто не звонил уточнять.</p></article>
+        <article class="rev"><div class="rev-top"><div class="rev-av" style="background:#5e9384">М</div><div><b>Мария Л.</b><span>Шейно-воротниковый</span></div></div><div class="stars">★★★★★</div><p>Хожу в обед из офиса напротив. Тридцать минут — и шея снова поворачивается. Цена не меняется от настроения администратора.</p></article>
+        <article class="rev"><div class="rev-top"><div class="rev-av" style="background:#7a6a58">О</div><div><b>Ольга</b><span>Расслабляющий с маслами</span></div></div><div class="stars">★★★★★</div><p>Отдельное спасибо за то, что не продают абонемент на десять сеансов. Пришла, заплатила, ушла довольная.</p></article>
+      </div></div>
+      <div class="rev-track"><div class="rev-row b" data-mq>
+        <article class="rev"><div class="rev-top"><div class="rev-av" style="background:#4a5f52">С</div><div><b>Сергей П.</b><span>Спортивный, 60 минут</span></div></div><div class="stars">★★★★★</div><p>После марафона еле ходил. Два сеанса — и вернулся к тренировкам. Мастер объяснил, что делать дома, без продажи курса.</p></article>
+        <article class="rev"><div class="rev-top"><div class="rev-av" style="background:#9c7f63">Е</div><div><b>Екатерина</b><span>Классический, 90 минут</span></div></div><div class="stars">★★★★★</div><p>Тихо. По-настоящему тихо: без музыки на полную и болтовни за стенкой. Для меня это оказалось главным.</p></article>
+        <article class="rev"><div class="rev-top"><div class="rev-av" style="background:#3c6b5d">И</div><div><b>Игорь</b><span>Экспресс, 30 минут</span></div></div><div class="stars">★★★★★</div><p>Удобно, что можно прийти без переодевания и уложиться в перерыв. Парковка своя — не искал место полчаса.</p></article>
+        <article class="rev"><div class="rev-top"><div class="rev-av" style="background:#b4795a">Н</div><div><b>Наталья</b><span>Расслабляющий</span></div></div><div class="stars">★★★★★</div><p>Пришла с подарочным сертификатом, осталась постоянным клиентом. Записываюсь на месяц вперёд через сайт.</p></article>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ── ВОПРОСЫ ───────────────────────────────────────────── -->
+  <section class="band" id="vopros" style="background:var(--sand-deep)">
+    <div class="shell">
+      <p class="cap rise">Вопросы</p>
+      <h2 class="rise d1" style="margin-bottom:38px">Что спрашивают чаще всего</h2>
+
+      <div class="faq rise d2">
+        <details class="qa">
+          <summary class="qa-q">Нужна ли справка от врача?<span class="qa-ico"></span></summary>
+          <div class="qa-a"><p>Для классического и расслабляющего массажа — нет. Если есть хронические заболевания спины, недавние травмы или беременность, скажите об этом при записи: мастер подберёт программу или честно порекомендует сначала сходить к врачу.</p></div>
+        </details>
+        <details class="qa">
+          <summary class="qa-q">Что взять с собой?<span class="qa-ico"></span></summary>
+          <div class="qa-a"><p>Ничего. Полотенце, одноразовое бельё и тапочки выдаём на месте. Душ есть, шампунь и гель тоже.</p></div>
+        </details>
+        <details class="qa">
+          <summary class="qa-q">Можно ли перенести запись?<span class="qa-ico"></span></summary>
+          <div class="qa-a"><p>Да, за три часа до сеанса — бесплатно, прямо в том же чате, где пришло подтверждение. Позже — тоже перенесём, если у мастера останется свободное окно.</p></div>
+        </details>
+        <details class="qa">
+          <summary class="qa-q">Больно ли это?<span class="qa-ico"></span></summary>
+          <div class="qa-a"><p>Не должно быть. Глубокая проработка иногда чувствуется, но терпеть не нужно: скажите мастеру, и давление изменят в ту же секунду. Массаж «через боль» — миф, от которого мышцы только зажимаются сильнее.</p></div>
+        </details>
+        <details class="qa">
+          <summary class="qa-q">Как оплатить?<span class="qa-ico"></span></summary>
+          <div class="qa-a"><p>Наличными или картой на месте, предоплата не нужна. Сертификат тоже можно купить — на сумму или на конкретную программу.</p></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ЗАПИСЬ ────────────────────────────────────────────── -->
+  <section class="band" id="zapis">
+    <div class="shell">
+      <div class="book-wrap rise">
+        <div class="book-grid">
+          <div>
+            <h2>Запишитесь на удобное время</h2>
+            <p>Выберите услугу и день — подтверждение придёт в Telegram в течение пятнадцати минут.</p>
+            <div class="book-pts">
+              <div class="book-pt"><i>✓</i> Без предоплаты</div>
+              <div class="book-pt"><i>✓</i> Перенос за три часа — бесплатно</div>
+              <div class="book-pt"><i>✓</i> Работаем ежедневно с 9:00 до 22:00</div>
+            </div>
+          </div>
+
+          <form class="form" id="form" novalidate>
+            <h3>Онлайн-запись</h3>
+            <p>Три поля — и всё.</p>
+
+            <div class="field">
+              <label for="f-name">Как к вам обращаться</label>
+              <input id="f-name" name="name" type="text" placeholder="Имя" autocomplete="name">
+            </div>
+            <div class="field">
+              <label for="f-tel">Телефон</label>
+              <input id="f-tel" name="tel" type="tel" placeholder="+7 900 000-00-00" autocomplete="tel">
+            </div>
+            <div class="field">
+              <label>Услуга</label>
+              <div class="chips" id="chips">
+                <button class="chip" type="button" aria-pressed="true">Классический</button>
+                <button class="chip" type="button" aria-pressed="false">Спортивный</button>
+                <button class="chip" type="button" aria-pressed="false">Экспресс</button>
+                <button class="chip" type="button" aria-pressed="false">С маслами</button>
+              </div>
+            </div>
+            <button class="btn" type="submit">
+              Записаться
+              <svg width="14" height="14" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                <path d="M2.5 6.5h8M7 3l3.5 3.5L7 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <p class="form-fine" id="fine">Это демонстрационная форма — данные никуда не отправляются.</p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="shell">
+    <div class="foot">
+      <span class="foot-b">ТИШИНА</span>
+      <div class="foot-links">
+        <a href="#uslugi">Услуги</a>
+        <a href="#ceny">Цены</a>
+        <a href="#otzyvy">Отзывы</a>
+        <a href="#zapis">Запись</a>
+      </div>
+    </div>
+    <p class="foot-note">
+      Демонстрационный проект из портфолио <a href="https://puchenkoff.ru/">D.PUCHENKOV</a>.
+      Студия «Тишина», отзывы, цены и адреса вымышлены и созданы для показа вёрстки —
+      это не действующее заведение. Страница закрыта от индексации намеренно.
+    </p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var slow = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ── появление блоков при прокрутке ─────────────────────── */
+  var risers = [].slice.call(document.querySelectorAll(".rise"));
+  if (!("IntersectionObserver" in window) || slow) {
+    risers.forEach(function (el) { el.classList.add("in"); });
+  } else {
+    var eye = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        e.target.classList.add("in");
+        eye.unobserve(e.target);
+      });
+    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.08 });
+    risers.forEach(function (el) { eye.observe(el); });
+  }
+
+  /* ── наклон карточки за курсором ─────────────────────────
+     Считаем положение указателя внутри элемента, переводим в
+     небольшой поворот по двум осям. Внутренние слои подняты
+     через translateZ, поэтому они смещаются сильнее фона —
+     отсюда и ощущение глубины.                              */
+  function bindTilt(el, max) {
+    var raf = null, rx = 0, ry = 0;
+
+    function apply() {
+      raf = null;
+      el.style.transform = "rotateX(" + rx.toFixed(2) + "deg) rotateY(" + ry.toFixed(2) + "deg)";
+    }
+    el.addEventListener("pointermove", function (e) {
+      if (slow) return;
+      var b = el.getBoundingClientRect();
+      var px = (e.clientX - b.left) / b.width;
+      var py = (e.clientY - b.top) / b.height;
+      ry = (px - 0.5) * max * 2;
+      rx = (0.5 - py) * max * 2;
+      el.style.setProperty("--mx", (px * 100).toFixed(1) + "%");
+      el.style.setProperty("--my", (py * 100).toFixed(1) + "%");
+      if (raf === null) raf = requestAnimationFrame(apply);
+    });
+    el.addEventListener("pointerleave", function () {
+      rx = ry = 0;
+      if (raf === null) raf = requestAnimationFrame(apply);
+    });
+  }
+  [].slice.call(document.querySelectorAll("[data-tilt]")).forEach(function (el) { bindTilt(el, 7); });
+  [].slice.call(document.querySelectorAll("[data-tilt-soft]")).forEach(function (el) { bindTilt(el, 2.4); });
+
+  /* ── пятно света под курсором ────────────────────────────── */
+  [].slice.call(document.querySelectorAll("[data-spot]")).forEach(function (el) {
+    el.addEventListener("pointermove", function (e) {
+      var b = el.getBoundingClientRect();
+      el.style.setProperty("--mx", (((e.clientX - b.left) / b.width) * 100).toFixed(1) + "%");
+      el.style.setProperty("--my", (((e.clientY - b.top) / b.height) * 100).toFixed(1) + "%");
+    });
+  });
+
+  /* ── бегущие ленты ───────────────────────────────────────
+     Содержимое дублируем скриптом: в разметке лента лежит один
+     раз и остаётся читаемой, а для бесшовной прокрутки нужна
+     вторая копия ровно той же ширины.                        */
+  [].slice.call(document.querySelectorAll("[data-mq]")).forEach(function (row) {
+    var copy = row.cloneNode(true);
+    copy.removeAttribute("data-mq");
+    copy.setAttribute("aria-hidden", "true");
+    row.parentNode.appendChild(copy);
+    copy.className = row.className;
+  });
+
+  /* ── счётчики ────────────────────────────────────────────
+     Отсчёт запускаем один раз, когда блок доехал до экрана:
+     цифра, отсчитавшая своё до того, как её увидели, — просто
+     потраченный кадр.                                        */
+  function runCount(el) {
+    var target = parseFloat(el.getAttribute("data-count"));
+    var suffix = el.getAttribute("data-suffix") || "";
+    if (slow) { el.textContent = target.toLocaleString("ru-RU") + suffix; return; }
+
+    var dur = 1500, t0 = null;
+    function frame(now) {
+      if (t0 === null) t0 = now;
+      var p = Math.min((now - t0) / dur, 1);
+      /* торможение к концу — цифра «доезжает», а не обрывается */
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased).toLocaleString("ru-RU") + suffix;
+      if (p < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  var counters = [].slice.call(document.querySelectorAll("[data-count]"));
+  if (!("IntersectionObserver" in window)) {
+    counters.forEach(runCount);
+  } else {
+    var cEye = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        runCount(e.target);
+        cEye.unobserve(e.target);
+      });
+    }, { threshold: 0.5 });
+    counters.forEach(function (el) { cEye.observe(el); });
+  }
+
+  /* ── шапка и полоса прогресса ────────────────────────────── */
+  var nav = document.getElementById("nav");
+  var prog = document.getElementById("prog");
+  var ticking = false;
+  function onScroll() {
+    ticking = false;
+    var y = window.pageYOffset;
+    nav.classList.toggle("stuck", y > 30);
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    prog.style.width = (h > 0 ? (y / h) * 100 : 0) + "%";
+  }
+  window.addEventListener("scroll", function () {
+    if (!ticking) { ticking = true; requestAnimationFrame(onScroll); }
+  }, { passive: true });
+  onScroll();
+
+  /* ── аккордеон: плавная высота вместо рывка ──────────────
+     У <details> нет анимации раскрытия, поэтому высоту
+     считаем сами. Разметка остаётся нативной: без скрипта
+     ответы всё равно открываются.                           */
+  [].slice.call(document.querySelectorAll(".qa")).forEach(function (qa) {
+    var body = qa.querySelector(".qa-a");
+    var sum = qa.querySelector("summary");
+
+    function fit() { body.style.maxHeight = qa.open ? body.scrollHeight + "px" : "0px"; }
+
+    sum.addEventListener("click", function (e) {
+      e.preventDefault();
+      if (qa.open) {
+        body.style.maxHeight = body.scrollHeight + "px";
+        requestAnimationFrame(function () {
+          body.style.maxHeight = "0px";
+          window.setTimeout(function () { qa.open = false; }, slow ? 0 : 450);
+        });
+      } else {
+        qa.open = true;
+        requestAnimationFrame(fit);
+      }
+    });
+    window.addEventListener("resize", fit, { passive: true });
+  });
+
+  /* ── выбор услуги в форме ────────────────────────────────── */
+  var chips = [].slice.call(document.querySelectorAll("#chips .chip"));
+  chips.forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      chips.forEach(function (c) { c.setAttribute("aria-pressed", "false"); });
+      chip.setAttribute("aria-pressed", "true");
+    });
+  });
+
+  /* кнопки «записаться» в тарифах ведут к форме и подставляют услугу */
+  [].slice.call(document.querySelectorAll("[data-book]")).forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.getElementById("zapis").scrollIntoView({ behavior: slow ? "auto" : "smooth", block: "start" });
+      window.setTimeout(function () { document.getElementById("f-name").focus({ preventScroll: true }); }, slow ? 0 : 700);
+    });
+  });
+
+  /* ── отправка формы ──────────────────────────────────────
+     Формы на демо нет по определению: отправлять данные
+     несуществующей студии некуда, а собирать телефоны на
+     странице-витрине — тем более незачем. Показываем это
+     прямо, а не молчаливым «спасибо».                       */
+  var form = document.getElementById("form");
+  var fine = document.getElementById("fine");
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var name = document.getElementById("f-name").value.trim();
+    fine.textContent = name
+      ? name + ", это демонстрация вёрстки — заявка никуда не ушла."
+      : "Это демонстрация вёрстки — заявка никуда не ушла.";
+    fine.style.color = "#3c6b5d";
+  });
+})();
+</script>
+</body>
+</html>
