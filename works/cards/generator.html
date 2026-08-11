@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Генератор карточек Ozon/WB — демо-проект D.PUCHENKOV</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Инструмент собирает инфографику для карточки товара из вашего фото прямо в браузере: главный кадр, характеристики, сравнение. Экспорт в PNG, без загрузки фото на сервер.">
+<meta name="theme-color" content="#141619">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23141619'/%3E%3Crect x='16' y='16' width='32' height='32' rx='6' fill='none' stroke='%23e8eaec' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%23ea580c'/%3E%3C/svg%3E">
+
+<style>
+  /* ═══════════════════════════════════════════════════════════
+     Генератор карточек для Ozon/WB — демо-инструмент портфолио.
+     Фото не покидает браузер: FileReader читает файл локально,
+     Canvas 2D рисует карточку, PNG собирается через toBlob().
+     Ни одной внешней библиотеки и сетевого запроса.
+     ═══════════════════════════════════════════════════════════ */
+  :root {
+    --base:     #141619;
+    --lift:     #1c1f24;
+    --card:     #22262c;
+    --field:    #1a1d21;
+    --text:     #e8eaec;
+    --soft:     #aab1b8;
+    --faint:    #8b939b;
+    --edge:     #313740;
+    --edge-lit: #6f7883;
+    --acc:      #ea580c;
+    --acc-lit:  #f2884a;
+    --on-acc:   #141619;
+    --acc-dim:  rgba(234, 88, 12, 0.12);
+    --face: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display",
+            "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--base); color: var(--text); font-family: var(--face); }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--acc-lit); outline-offset: 2px; border-radius: 3px; }
+
+  .demo-bar {
+    background: var(--lift); border-bottom: 1px solid var(--edge);
+    font-family: var(--mono); font-size: 12.5px; color: var(--faint);
+    padding: 10px 20px; text-align: center; line-height: 1.5;
+  }
+  .demo-bar b { color: var(--soft); }
+
+  header.top {
+    max-width: 1360px; margin: 0 auto; padding: 22px 24px 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .back {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.04em; color: var(--faint);
+    text-decoration: none; transition: color 0.25s ease;
+  }
+  .back:hover { color: var(--acc-lit); }
+  .back svg { display: block; }
+  .top-title { font-size: 14px; color: var(--soft); font-family: var(--mono); letter-spacing: 0.02em; }
+  .top-title b { color: var(--text); }
+
+  main { max-width: 1360px; margin: 0 auto; padding: 28px 24px 90px; }
+
+  h1 { font-size: clamp(24px, 3.4vw, 32px); font-weight: 800; letter-spacing: -0.02em; margin: 10px 0 8px; }
+  .lede { max-width: 68ch; color: var(--soft); font-size: 15px; line-height: 1.6; margin: 0 0 30px; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 28px; align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  /* ── превью ─────────────────────────────────────────────── */
+  .preview-col { position: sticky; top: 20px; display: flex; flex-direction: column; gap: 14px; }
+  @media (max-width: 980px) { .preview-col { position: static; order: -1; } }
+
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tab {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.02em;
+    padding: 9px 14px; border-radius: 9px; border: 1px solid var(--edge);
+    background: var(--card); color: var(--soft); cursor: pointer; transition: all 0.2s ease;
+  }
+  .tab:hover { border-color: var(--edge-lit); color: var(--text); }
+  .tab[aria-pressed="true"] { background: var(--acc); border-color: var(--acc); color: var(--on-acc); font-weight: 700; }
+
+  .canvas-frame {
+    border-radius: 16px; overflow: hidden; border: 1px solid var(--edge);
+    box-shadow: 0 30px 70px -30px rgba(0,0,0,0.7); background: #e3e7ea;
+    max-width: 420px; margin: 0 auto; width: 100%;
+  }
+  .canvas-frame canvas { display: block; width: 100%; height: auto; }
+
+  .dl-row { display: flex; gap: 10px; }
+  .btn {
+    flex: 1; font-family: var(--face); font-size: 14.5px; font-weight: 700;
+    padding: 13px 16px; border-radius: 11px; border: 1px solid var(--edge);
+    background: var(--card); color: var(--text); cursor: pointer; transition: all 0.2s ease;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn:hover { border-color: var(--edge-lit); }
+  .btn.primary { background: var(--acc); border-color: var(--acc); color: var(--on-acc); }
+  .btn.primary:hover { background: var(--acc-lit); border-color: var(--acc-lit); }
+  .hint { font-family: var(--mono); font-size: 11.5px; color: var(--faint); text-align: center; line-height: 1.6; }
+
+  /* ── панель управления ──────────────────────────────────── */
+  .panel { background: var(--card); border: 1px solid var(--edge); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 22px; }
+  .group { display: flex; flex-direction: column; gap: 10px; }
+  .group-label {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint);
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 13px; color: var(--soft); }
+  .field input[type="text"], .field textarea {
+    width: 100%; background: var(--field); border: 1px solid var(--edge); border-radius: 9px;
+    padding: 10px 12px; color: var(--text); font-family: var(--face); font-size: 14px;
+    transition: border-color 0.2s ease;
+  }
+  .field textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
+  .field input:focus, .field textarea:focus { border-color: var(--acc); outline: none; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .upload {
+    border: 1.5px dashed var(--edge-lit); border-radius: 12px; padding: 16px;
+    display: flex; align-items: center; gap: 12px; cursor: pointer; position: relative;
+    transition: border-color 0.2s ease, background 0.2s ease; background: var(--field);
+  }
+  .upload:hover, .upload.drag { border-color: var(--acc); background: var(--acc-dim); }
+  .upload input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload .thumb {
+    width: 46px; height: 46px; border-radius: 8px; background: var(--lift); flex: none;
+    display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--edge);
+  }
+  .upload .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .upload .txt { font-size: 13px; color: var(--soft); line-height: 1.4; }
+  .upload .txt b { color: var(--text); display: block; font-size: 13.5px; margin-bottom: 2px; }
+  .upload .clear {
+    margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--faint);
+    background: none; border: 1px solid var(--edge); border-radius: 7px; padding: 6px 9px;
+    cursor: pointer; position: relative; z-index: 2;
+  }
+  .upload .clear:hover { color: var(--acc-lit); border-color: var(--acc-lit); }
+
+  .swatches { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .swatch {
+    width: 28px; height: 28px; border-radius: 8px; border: 2px solid transparent; cursor: pointer;
+    padding: 0;
+  }
+  .swatch[aria-pressed="true"] { border-color: var(--text); }
+  .swatch.custom { display: flex; align-items: center; justify-content: center; background: var(--field); border: 1px dashed var(--edge-lit); }
+  .swatch.custom input { width: 20px; height: 20px; border: none; padding: 0; background: none; cursor: pointer; }
+
+  .stat-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; }
+  .stat-row input { min-width: 0; }
+  .rm {
+    width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--edge); background: var(--field);
+    color: var(--faint); cursor: pointer; font-size: 15px; line-height: 1; flex: none;
+  }
+  .rm:hover { color: var(--acc-lit); border-color: var(--acc-lit); }
+  .add-row {
+    align-self: flex-start; font-family: var(--mono); font-size: 12px; color: var(--acc-lit);
+    background: none; border: 1px dashed var(--edge-lit); border-radius: 8px; padding: 7px 12px; cursor: pointer;
+  }
+  .add-row:hover { border-color: var(--acc-lit); }
+  .add-row[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+  .points-hint { font-size: 11.5px; color: var(--faint); line-height: 1.5; }
+
+  .tpl-fields { display: none; flex-direction: column; gap: 18px; }
+  .tpl-fields.active { display: flex; }
+
+  .reset-line { display: flex; justify-content: flex-end; }
+  .reset {
+    font-family: var(--mono); font-size: 11.5px; color: var(--faint); background: none; border: none;
+    cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .reset:hover { color: var(--acc-lit); }
+
+  footer { max-width: 1360px; margin: 60px auto 0; padding: 26px 24px 0; border-top: 1px solid var(--edge); }
+  footer p { font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--faint); max-width: 78ch; }
+  footer a { color: var(--acc-lit); text-decoration: underline; text-underline-offset: 3px; }
+</style>
+</head>
+<body>
+
+<div class="demo-bar"><b>Демо-инструмент.</b> Собирает карточку из вашего фото прямо в браузере — файл никуда не отправляется.</div>
+
+<header class="top">
+  <a class="back" href="index.html">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+      <path d="M10.5 2.5L2.5 10.5M2.5 10.5H8.5M2.5 10.5V4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Карточки для Ozon и WB
+  </a>
+  <span class="top-title">D.PUCHENKOV · <b>генератор карточек</b></span>
+</header>
+
+<main>
+  <h1>Генератор карточек товара</h1>
+  <p class="lede">Загрузите фото товара, выберите шаблон и поправьте текст — карточка соберётся сама, в пропорции 3:4 под требования Ozon и Wildberries. Скачивается сразу в PNG высокого разрешения.</p>
+
+  <div class="layout">
+    <aside class="panel">
+      <div class="group">
+        <span class="group-label">Шаблон</span>
+        <div class="tabs" id="tabs" role="tablist">
+          <button class="tab" data-tpl="t1" aria-pressed="true">01 · Главный кадр</button>
+          <button class="tab" data-tpl="t2" aria-pressed="false">02 · Характеристики</button>
+          <button class="tab" data-tpl="t3" aria-pressed="false">03 · Сравнение</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <span class="group-label">Фото товара</span>
+        <label class="upload" id="up1">
+          <input type="file" accept="image/*" id="file1">
+          <span class="thumb" id="thumb1">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" stroke="#6f7883" stroke-width="1.6"/><circle cx="8.5" cy="8.5" r="1.6" fill="#6f7883"/><path d="M21 15l-5.5-5.5L4 21" stroke="#6f7883" stroke-width="1.6"/></svg>
+          </span>
+          <span class="txt"><b>Загрузить фото</b>перетащите файл или нажмите</span>
+          <button type="button" class="clear" id="clear1" hidden>убрать</button>
+        </label>
+      </div>
+
+      <div class="group" id="up2group" style="display:none">
+        <span class="group-label">Фото «до» (необязательно)</span>
+        <label class="upload" id="up2">
+          <input type="file" accept="image/*" id="file2">
+          <span class="thumb" id="thumb2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" stroke="#6f7883" stroke-width="1.6"/><circle cx="8.5" cy="8.5" r="1.6" fill="#6f7883"/><path d="M21 15l-5.5-5.5L4 21" stroke="#6f7883" stroke-width="1.6"/></svg>
+          </span>
+          <span class="txt"><b>Без фото — серый плейсхолдер</b>для сравнения «было/стало»</span>
+          <button type="button" class="clear" id="clear2" hidden>убрать</button>
+        </label>
+      </div>
+
+      <div class="group">
+        <span class="group-label">Акцентный цвет</span>
+        <div class="swatches" id="swatches">
+          <button class="swatch" style="background:#ea580c" data-color="#ea580c" aria-pressed="true"></button>
+          <button class="swatch" style="background:#2563eb" data-color="#2563eb" aria-pressed="false"></button>
+          <button class="swatch" style="background:#16a34a" data-color="#16a34a" aria-pressed="false"></button>
+          <button class="swatch" style="background:#9333ea" data-color="#9333ea" aria-pressed="false"></button>
+          <button class="swatch" style="background:#0891b2" data-color="#0891b2" aria-pressed="false"></button>
+          <span class="swatch custom"><input type="color" id="customColor" value="#ea580c"></span>
+        </div>
+      </div>
+
+      <!-- Шаблон 1 — главный кадр -->
+      <div class="tpl-fields active" data-tpl="t1">
+        <div class="field">
+          <label><input type="checkbox" id="t1-badge-on" checked style="margin-right:6px"> Плашка-бейдж</label>
+          <input type="text" id="t1-badge" value="ХИТ ПРОДАЖ" maxlength="24">
+        </div>
+        <div class="field"><label>Заголовок</label><input type="text" id="t1-title" value="Термокружка с крышкой" maxlength="46"></div>
+        <div class="field"><label>Подзаголовок</label><input type="text" id="t1-sub" value="Не протекает в сумке · для кофе и чая" maxlength="60"></div>
+        <div class="row2">
+          <div class="field"><label>Цифра 1</label><input type="text" id="t1-s1v" value="12 часов" maxlength="16"></div>
+          <div class="field"><label>Подпись 1</label><input type="text" id="t1-s1l" value="держит температуру" maxlength="26"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Цифра 2</label><input type="text" id="t1-s2v" value="450 мл" maxlength="16"></div>
+          <div class="field"><label>Подпись 2</label><input type="text" id="t1-s2l" value="объём · сталь 304" maxlength="26"></div>
+        </div>
+      </div>
+
+      <!-- Шаблон 2 — характеристики -->
+      <div class="tpl-fields" data-tpl="t2">
+        <div class="field"><label>Заголовок</label><input type="text" id="t2-title" value="Характеристики" maxlength="30"></div>
+        <div class="group">
+          <span class="group-label">Пары «цифра — подпись» (2–6)</span>
+          <div id="t2-stats"></div>
+          <button class="add-row" id="t2-add" type="button">+ добавить пару</button>
+        </div>
+        <div class="field"><label>Плашка внизу</label><input type="text" id="t2-footer" value="Гарантия 12 месяцев · обмен без вопросов" maxlength="60"></div>
+      </div>
+
+      <!-- Шаблон 3 — сравнение -->
+      <div class="tpl-fields" data-tpl="t3">
+        <div class="field"><label>Заголовок</label><input type="text" id="t3-title" value="Обычная кружка и термокружка" maxlength="46"></div>
+        <div class="row2">
+          <div class="field"><label>Метка слева</label><input type="text" id="t3-ll" value="ОБЫЧНАЯ" maxlength="14"></div>
+          <div class="field"><label>Метка справа</label><input type="text" id="t3-rl" value="НАША" maxlength="14"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Цифра слева</label><input type="text" id="t3-lsv" value="20 минут" maxlength="16"></div>
+          <div class="field"><label>Цифра справа</label><input type="text" id="t3-rsv" value="12 часов" maxlength="16"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Подпись слева</label><input type="text" id="t3-lsl" value="и кофе остыл" maxlength="24"></div>
+          <div class="field"><label>Подпись справа</label><input type="text" id="t3-rsl" value="кофе горячий до вечера" maxlength="24"></div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Минусы слева (по строке)</label>
+            <textarea id="t3-lp">Проливается в сумке
+Обжигает руки
+Пахнет прошлым напитком</textarea>
+          </div>
+          <div class="field">
+            <label>Плюсы справа (по строке)</label>
+            <textarea id="t3-rp">Герметичная крышка
+Двойные стенки, не жжёт
+Сталь без запаха</textarea>
+          </div>
+        </div>
+        <p class="points-hint">До 3 строк с каждой стороны — лишние обрежутся.</p>
+        <div class="field"><label>Итоговая фраза</label><input type="text" id="t3-stmt" value="Один раз купить — и забыть про остывший кофе" maxlength="60"></div>
+        <div class="field"><label>Подпись под фразой</label><input type="text" id="t3-stmtsub" value="Подходит для автомобильного подстаканника" maxlength="60"></div>
+        <div class="field"><label>Текст на кнопке</label><input type="text" id="t3-btn" value="Гарантия 12 месяцев" maxlength="30"></div>
+      </div>
+
+      <div class="reset-line"><button class="reset" id="resetBtn" type="button">сбросить текущий шаблон к примеру</button></div>
+    </aside>
+
+    <div class="preview-col">
+      <div class="canvas-frame">
+        <canvas id="cv" width="2400" height="3200"></canvas>
+      </div>
+      <div class="dl-row">
+        <button class="btn primary" id="dlBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v13m0 0l-5-5m5 5l5-5M4 21h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Скачать PNG
+        </button>
+      </div>
+      <p class="hint">Экспорт 2400×3200&nbsp;px (3:4, ретина). Каждый шаблон скачивается отдельным файлом.</p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <p>Демонстрационный инструмент из портфолио <a href="/">D.PUCHENKOV</a>. Товар на скриншотах вымышленный. Загруженное фото обрабатывается локально в вашем браузере и никуда не передаётся.</p>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 1200, H = 1600, SCALE = 2;
+  var cv = document.getElementById("cv");
+  var ctx = cv.getContext("2d");
+
+  var state = {
+    tpl: "t1",
+    accent: "#ea580c",
+    img1: null,
+    img2: null,
+    t2stats: [
+      { v: "12 часов", l: "тепло без подогрева" },
+      { v: "24 часа",  l: "холод в жару" },
+      { v: "450 мл",   l: "помещается в подстаканник" },
+      { v: "450 г",    l: "вес пустой кружки" },
+      { v: "Сталь 304", l: "пищевая, без запаха" },
+      { v: "Не течёт", l: "герметичная крышка" }
+    ]
+  };
+
+  // ── геометрия ──────────────────────────────────────────────
+  function roundRect(x, y, w, h, r) {
+    if (typeof r === "number") r = { tl: r, tr: r, br: r, bl: r };
+    ctx.beginPath();
+    ctx.moveTo(x + r.tl, y);
+    ctx.lineTo(x + w - r.tr, y);
+    ctx.arcTo(x + w, y, x + w, y + r.tr, r.tr);
+    ctx.lineTo(x + w, y + h - r.br);
+    ctx.arcTo(x + w, y + h, x + w - r.br, y + h, r.br);
+    ctx.lineTo(x + r.bl, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r.bl, r.bl);
+    ctx.lineTo(x, y + r.tl);
+    ctx.arcTo(x, y, x + r.tl, y, r.tl);
+    ctx.closePath();
+  }
+
+  function pill(x, y, w, h, r, fill, stroke, strokeW) {
+    roundRect(x, y, w, h, r);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = strokeW || 2; ctx.stroke(); }
+  }
+
+  function drawImageContain(img, x, y, w, h) {
+    var ir = img.width / img.height, br = w / h, dw, dh, dx, dy;
+    if (ir > br) { dw = w; dh = w / ir; } else { dh = h; dw = h * ir; }
+    dx = x + (w - dw) / 2; dy = y + (h - dh) / 2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+  }
+
+  function drawImageCover(img, x, y, w, h) {
+    var ir = img.width / img.height, br = w / h, sx, sy, sw, sh;
+    if (ir > br) { sh = img.height; sw = sh * br; sy = 0; sx = (img.width - sw) / 2; }
+    else { sw = img.width; sh = sw / br; sx = 0; sy = (img.height - sh) / 2; }
+    ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+  }
+
+  function placeholder(x, y, w, h, r) {
+    pill(x, y, w, h, r || 16, "#e3e7ea");
+    ctx.save();
+    roundRect(x, y, w, h, r || 16); ctx.clip();
+    var cx = x + w / 2, cy = y + h / 2, s = Math.min(w, h) * 0.28;
+    ctx.strokeStyle = "#b7bcc2"; ctx.lineWidth = Math.max(3, s * 0.09);
+    roundRect(cx - s, cy - s * 0.75, s * 2, s * 1.5, s * 0.14); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx - s * 0.45, cy - s * 0.25, s * 0.22, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - s, cy + s * 0.55);
+    ctx.lineTo(cx - s * 0.15, cy - s * 0.15);
+    ctx.lineTo(cx + s * 0.35, cy + s * 0.3);
+    ctx.lineTo(cx + s * 0.75, cy - s * 0.1);
+    ctx.lineTo(cx + s, cy + s * 0.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function fitFont(text, maxWidth, size, weight, max, min) {
+    var f = size;
+    ctx.font = weight + " " + f + "px Arial";
+    while (ctx.measureText(text).width > maxWidth && f > (min || 18)) {
+      f -= 2;
+      ctx.font = weight + " " + f + "px Arial";
+    }
+    return f;
+  }
+
+  function wrapLines(text, maxWidth, font) {
+    ctx.font = font;
+    var words = text.split(/\s+/), lines = [], cur = "";
+    words.forEach(function (w) {
+      var t = cur ? cur + " " + w : w;
+      if (ctx.measureText(t).width > maxWidth && cur) { lines.push(cur); cur = w; }
+      else cur = t;
+    });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  function hexToRgba(hex, a) {
+    var v = parseInt(hex.slice(1), 16);
+    var r = (v >> 16) & 255, g = (v >> 8) & 255, b = v & 255;
+    return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+  }
+
+  // ── фон ────────────────────────────────────────────────────
+  function bg() {
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#eef1f3"); g.addColorStop(1, "#e0e4e7");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+
+  // ── шаблон 1 ───────────────────────────────────────────────
+  function renderT1(s) {
+    bg();
+    var big = ctx.createRadialGradient(600, 560, 60, 600, 560, 460);
+    big.addColorStop(0, "#f3f5f6"); big.addColorStop(1, "#dde2e5");
+    ctx.fillStyle = big; ctx.beginPath(); ctx.arc(600, 560, 430, 0, Math.PI * 2); ctx.fill();
+
+    if (state.img1) drawImageContain(state.img1, 300, 260, 600, 640);
+    else placeholder(390, 300, 420, 560, 20);
+
+    if (s.badgeOn && s.badge) {
+      ctx.font = "800 30px Arial";
+      var bw = ctx.measureText(s.badge).width + 64;
+      pill(60, 56, bw, 68, 16, state.accent);
+      ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+      ctx.fillText(s.badge, 92, 92);
+    }
+
+    var pw = (W - 120 - 40) / 2, ph = 150, py = 1120;
+    pill(60, py, pw, ph, 18, "#ffffff");
+    pill(60 + pw + 40, py, pw, ph, 18, "#ffffff");
+    [{ x: 60, v: s.s1v, l: s.s1l }, { x: 60 + pw + 40, v: s.s2v, l: s.s2l }].forEach(function (st) {
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#141619";
+      var fs = fitFont(st.v, pw - 56, 44, "800", 44, 26);
+      ctx.font = "800 " + fs + "px Arial";
+      ctx.fillText(st.v, st.x + 28, py + 66);
+      ctx.font = "400 24px Arial"; ctx.fillStyle = "#8b939b";
+      ctx.fillText(st.l.length > 28 ? st.l.slice(0, 27) + "…" : st.l, st.x + 28, py + 104);
+    });
+
+    ctx.textAlign = "center";
+    var tfs = fitFont(s.title, W - 160, 52, "800", 52, 30);
+    ctx.font = "800 " + tfs + "px Arial"; ctx.fillStyle = "#141619";
+    ctx.fillText(s.title, W / 2, 1372);
+
+    ctx.font = "400 26px Arial"; ctx.fillStyle = "#8b939b";
+    var subLines = wrapLines(s.sub, W - 200, "400 26px Arial");
+    subLines.slice(0, 2).forEach(function (ln, i) { ctx.fillText(ln, W / 2, 1416 + i * 34); });
+
+    ctx.strokeStyle = "#c9ced2"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 60, 1500); ctx.lineTo(W / 2 + 60, 1500); ctx.stroke();
+  }
+
+  // ── шаблон 2 ───────────────────────────────────────────────
+  function renderT2(s) {
+    bg();
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    var tfs = fitFont(s.title, W - 120, 50, "800", 50, 30);
+    ctx.font = "800 " + tfs + "px Arial"; ctx.fillStyle = "#141619";
+    ctx.fillText(s.title, 60, 120);
+    pill(60, 148, 110, 6, 3, state.accent);
+
+    if (state.img1) drawImageContain(state.img1, 400, 210, 400, 470);
+    else placeholder(430, 210, 340, 470, 18);
+
+    var stats = state.t2stats.slice(0, 6);
+    var cols = 2, colW = (W - 120 - 40) / 2, rowH = 158, gapY = 26;
+    var startY = 726;
+    stats.forEach(function (st, i) {
+      var col = i % cols, row = Math.floor(i / cols);
+      var x = 60 + col * (colW + 40), y = startY + row * (rowH + gapY);
+      pill(x, y, colW, rowH, 18, "#ffffff");
+      ctx.textAlign = "left"; ctx.fillStyle = "#141619";
+      var fs = fitFont(st.v, colW - 56, 38, "800", 38, 22);
+      ctx.font = "800 " + fs + "px Arial";
+      ctx.fillText(st.v, x + 28, y + 62);
+      ctx.font = "400 22px Arial"; ctx.fillStyle = "#8b939b";
+      ctx.fillText(st.l.length > 30 ? st.l.slice(0, 29) + "…" : st.l, x + 28, y + 98);
+    });
+
+    var rows = Math.ceil(stats.length / cols);
+    var gridBottom = startY + rows * rowH + (rows - 1) * gapY;
+    var footY = gridBottom + 40;
+    pill(60, footY, W - 120, 100, 20, "#141619");
+    ctx.textAlign = "center"; ctx.fillStyle = "#fff";
+    var ffs = fitFont(s.footer, W - 200, 30, "800", 30, 18);
+    ctx.font = "800 " + ffs + "px Arial";
+    ctx.fillText(s.footer, W / 2, footY + 62);
+  }
+
+  // ── шаблон 3 ───────────────────────────────────────────────
+  function renderT3(s) {
+    bg();
+    ctx.textAlign = "left"; ctx.fillStyle = "#141619";
+    var tfs = fitFont(s.title, W - 120, 46, "800", 46, 26);
+    ctx.font = "800 " + tfs + "px Arial";
+    ctx.fillText(s.title, 60, 118);
+
+    var cw = (W - 120 - 40) / 2, cy = 200, ch = 900;
+    var lx = 60, rx = 60 + cw + 40;
+
+    pill(lx, cy, cw, ch, 22, "#ffffff", "#e5e7ea", 2);
+    pill(rx, cy, cw, ch, 22, "#ffffff", state.accent, 3);
+
+    ctx.textAlign = "center";
+    ctx.font = "800 26px Arial"; ctx.fillStyle = "#9aa0a6";
+    ctx.fillText((s.ll || "ДО").toUpperCase(), lx + cw / 2, cy + 60);
+    ctx.fillStyle = state.accent;
+    ctx.fillText((s.rl || "ПОСЛЕ").toUpperCase(), rx + cw / 2, cy + 60);
+
+    var imgY = cy + 90, imgH = 340;
+    if (state.img2) drawImageContain(state.img2, lx + 30, imgY, cw - 60, imgH);
+    else placeholder(lx + 30, imgY, cw - 60, imgH, 14);
+    if (state.img1) drawImageContain(state.img1, rx + 30, imgY, cw - 60, imgH);
+    else placeholder(rx + 30, imgY, cw - 60, imgH, 14);
+
+    var statY = imgY + imgH + 78;
+    ctx.textAlign = "center";
+    var lfs = fitFont(s.lsv, cw - 60, 40, "800", 40, 24);
+    ctx.font = "800 " + lfs + "px Arial"; ctx.fillStyle = "#141619";
+    ctx.fillText(s.lsv, lx + cw / 2, statY);
+    var rfs = fitFont(s.rsv, cw - 60, 40, "800", 40, 24);
+    ctx.font = "800 " + rfs + "px Arial";
+    ctx.fillText(s.rsv, rx + cw / 2, statY);
+
+    ctx.font = "400 22px Arial"; ctx.fillStyle = "#8b939b";
+    ctx.fillText(s.lsl, lx + cw / 2, statY + 34);
+    ctx.fillText(s.rsl, rx + cw / 2, statY + 34);
+
+    var listY = statY + 84;
+    ctx.font = "400 23px Arial";
+    var lpts = (s.lp || "").split("\n").map(function (t) { return t.trim(); }).filter(Boolean).slice(0, 3);
+    var rpts = (s.rp || "").split("\n").map(function (t) { return t.trim(); }).filter(Boolean).slice(0, 3);
+    ctx.fillStyle = "#b3b8bd";
+    lpts.forEach(function (t, i) { ctx.fillText(t.length > 26 ? t.slice(0, 25) + "…" : t, lx + cw / 2, listY + i * 40); });
+    ctx.fillStyle = "#3a3f45";
+    rpts.forEach(function (t, i) { ctx.fillText(t.length > 26 ? t.slice(0, 25) + "…" : t, rx + cw / 2, listY + i * 40); });
+
+    var stmtY = cy + ch + 40, stmtH = 180;
+    pill(60, stmtY, W - 120, stmtH, 22, "#ffffff");
+    ctx.textAlign = "center"; ctx.fillStyle = "#141619";
+    var stmtLines = wrapLines(s.stmt, W - 200, "800 34px Arial");
+    var sfs = stmtLines.length > 1 ? fitFont(stmtLines[0], W - 200, 30, "800", 30, 22) : fitFont(s.stmt, W - 200, 36, "800", 36, 24);
+    ctx.font = "800 " + sfs + "px Arial";
+    if (stmtLines.length > 1) {
+      ctx.font = "800 " + fitFont(stmtLines[0], W - 200, 30, "800", 30, 20) + "px Arial";
+      stmtLines.slice(0, 2).forEach(function (ln, i) { ctx.fillText(ln, W / 2, stmtY + 68 + i * 38); });
+    } else {
+      ctx.fillText(s.stmt, W / 2, stmtY + 78);
+    }
+    ctx.font = "400 24px Arial"; ctx.fillStyle = "#8b939b";
+    ctx.fillText(s.stmtsub, W / 2, stmtY + stmtH - 32);
+
+    var btnY = stmtY + stmtH + 30, btnH = 108;
+    pill(60, btnY, W - 120, btnH, btnH / 2, state.accent);
+    ctx.fillStyle = "#fff"; ctx.font = "800 32px Arial";
+    ctx.fillText(s.btn, W / 2, btnY + btnH / 2 + 11);
+  }
+
+  function collect(tpl) {
+    if (tpl === "t1") return {
+      badgeOn: document.getElementById("t1-badge-on").checked,
+      badge: document.getElementById("t1-badge").value,
+      title: document.getElementById("t1-title").value || "Название товара",
+      sub: document.getElementById("t1-sub").value || "",
+      s1v: document.getElementById("t1-s1v").value || "—",
+      s1l: document.getElementById("t1-s1l").value || "",
+      s2v: document.getElementById("t1-s2v").value || "—",
+      s2l: document.getElementById("t1-s2l").value || ""
+    };
+    if (tpl === "t2") return {
+      title: document.getElementById("t2-title").value || "Характеристики",
+      footer: document.getElementById("t2-footer").value || ""
+    };
+    return {
+      title: document.getElementById("t3-title").value || "Сравнение",
+      ll: document.getElementById("t3-ll").value, rl: document.getElementById("t3-rl").value,
+      lsv: document.getElementById("t3-lsv").value || "—", rsv: document.getElementById("t3-rsv").value || "—",
+      lsl: document.getElementById("t3-lsl").value || "", rsl: document.getElementById("t3-rsl").value || "",
+      lp: document.getElementById("t3-lp").value, rp: document.getElementById("t3-rp").value,
+      stmt: document.getElementById("t3-stmt").value || "", stmtsub: document.getElementById("t3-stmtsub").value || "",
+      btn: document.getElementById("t3-btn").value || "Подробнее"
+    };
+  }
+
+  function render() {
+    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    var s = collect(state.tpl);
+    if (state.tpl === "t1") renderT1(s);
+    else if (state.tpl === "t2") renderT2(s);
+    else renderT3(s);
+  }
+
+  // ── шаблоны / вкладки ─────────────────────────────────────
+  var tabs = document.getElementById("tabs");
+  tabs.addEventListener("click", function (e) {
+    var b = e.target.closest(".tab"); if (!b) return;
+    state.tpl = b.dataset.tpl;
+    Array.prototype.forEach.call(tabs.querySelectorAll(".tab"), function (t) { t.setAttribute("aria-pressed", t === b); });
+    Array.prototype.forEach.call(document.querySelectorAll(".tpl-fields"), function (f) { f.classList.toggle("active", f.dataset.tpl === state.tpl); });
+    document.getElementById("up2group").style.display = state.tpl === "t3" ? "flex" : "none";
+    render();
+  });
+
+  // ── цвет ───────────────────────────────────────────────────
+  var swatches = document.getElementById("swatches");
+  swatches.addEventListener("click", function (e) {
+    var b = e.target.closest(".swatch:not(.custom)"); if (!b) return;
+    state.accent = b.dataset.color;
+    Array.prototype.forEach.call(swatches.querySelectorAll(".swatch"), function (s) { s.setAttribute("aria-pressed", "false"); });
+    b.setAttribute("aria-pressed", "true");
+    render();
+  });
+  document.getElementById("customColor").addEventListener("input", function (e) {
+    state.accent = e.target.value;
+    Array.prototype.forEach.call(swatches.querySelectorAll(".swatch"), function (s) { s.setAttribute("aria-pressed", "false"); });
+    render();
+  });
+
+  // ── загрузка фото ──────────────────────────────────────────
+  function wireUpload(inputId, thumbId, clearId, key) {
+    var input = document.getElementById(inputId);
+    var thumb = document.getElementById(thumbId);
+    var clearBtn = document.getElementById(clearId);
+    var wrap = input.closest(".upload");
+
+    function setImage(file) {
+      if (!file || !/^image\//.test(file.type)) return;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var img = new Image();
+        img.onload = function () {
+          state[key] = img;
+          thumb.innerHTML = "";
+          var im = document.createElement("img");
+          im.src = e.target.result;
+          thumb.appendChild(im);
+          clearBtn.hidden = false;
+          render();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    input.addEventListener("change", function () { setImage(input.files[0]); });
+    ["dragover", "dragenter"].forEach(function (ev) {
+      wrap.addEventListener(ev, function (e) { e.preventDefault(); wrap.classList.add("drag"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      wrap.addEventListener(ev, function () { wrap.classList.remove("drag"); });
+    });
+    wrap.addEventListener("drop", function (e) {
+      e.preventDefault();
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) setImage(e.dataTransfer.files[0]);
+    });
+    clearBtn.addEventListener("click", function (e) {
+      e.preventDefault(); e.stopPropagation();
+      state[key] = null; input.value = "";
+      thumb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" stroke="#6f7883" stroke-width="1.6"/><circle cx="8.5" cy="8.5" r="1.6" fill="#6f7883"/><path d="M21 15l-5.5-5.5L4 21" stroke="#6f7883" stroke-width="1.6"/></svg>';
+      clearBtn.hidden = true;
+      render();
+    });
+  }
+  wireUpload("file1", "thumb1", "clear1", "img1");
+  wireUpload("file2", "thumb2", "clear2", "img2");
+
+  // ── динамические пары для шаблона 2 ────────────────────────
+  var t2wrap = document.getElementById("t2-stats");
+  var t2add = document.getElementById("t2-add");
+
+  function renderT2Rows() {
+    t2wrap.innerHTML = "";
+    state.t2stats.forEach(function (st, i) {
+      var row = document.createElement("div");
+      row.className = "stat-row";
+      row.innerHTML =
+        '<input type="text" data-i="' + i + '" data-f="v" value="' + st.v.replace(/"/g, "&quot;") + '" maxlength="16" placeholder="цифра">' +
+        '<input type="text" data-i="' + i + '" data-f="l" value="' + st.l.replace(/"/g, "&quot;") + '" maxlength="30" placeholder="подпись">' +
+        '<button type="button" class="rm" data-i="' + i + '" ' + (state.t2stats.length <= 2 ? "disabled" : "") + '>×</button>';
+      t2wrap.appendChild(row);
+    });
+    t2add.disabled = state.t2stats.length >= 6;
+  }
+  t2wrap.addEventListener("input", function (e) {
+    var i = +e.target.dataset.i, f = e.target.dataset.f;
+    if (f) { state.t2stats[i][f] = e.target.value; render(); }
+  });
+  t2wrap.addEventListener("click", function (e) {
+    var b = e.target.closest(".rm"); if (!b) return;
+    state.t2stats.splice(+b.dataset.i, 1);
+    renderT2Rows(); render();
+  });
+  t2add.addEventListener("click", function () {
+    if (state.t2stats.length >= 6) return;
+    state.t2stats.push({ v: "Значение", l: "описание" });
+    renderT2Rows(); render();
+  });
+  renderT2Rows();
+
+  // ── ввод текста ──────────────────────────────────────────
+  document.querySelectorAll(".tpl-fields input, .tpl-fields textarea").forEach(function (el) {
+    el.addEventListener("input", render);
+  });
+
+  // ── сброс ──────────────────────────────────────────────────
+  var DEFAULTS = {
+    t1: { "t1-badge-on": true, "t1-badge": "ХИТ ПРОДАЖ", "t1-title": "Термокружка с крышкой", "t1-sub": "Не протекает в сумке · для кофе и чая", "t1-s1v": "12 часов", "t1-s1l": "держит температуру", "t1-s2v": "450 мл", "t1-s2l": "объём · сталь 304" },
+    t2: { "t2-title": "Характеристики", "t2-footer": "Гарантия 12 месяцев · обмен без вопросов" },
+    t3: { "t3-title": "Обычная кружка и термокружка", "t3-ll": "ОБЫЧНАЯ", "t3-rl": "НАША", "t3-lsv": "20 минут", "t3-rsv": "12 часов", "t3-lsl": "и кофе остыл", "t3-rsl": "кофе горячий до вечера", "t3-lp": "Проливается в сумке\nОбжигает руки\nПахнет прошлым напитком", "t3-rp": "Герметичная крышка\nДвойные стенки, не жжёт\nСталь без запаха", "t3-stmt": "Один раз купить — и забыть про остывший кофе", "t3-stmtsub": "Подходит для автомобильного подстаканника", "t3-btn": "Гарантия 12 месяцев" }
+  };
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    var d = DEFAULTS[state.tpl];
+    Object.keys(d).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el.type === "checkbox") el.checked = d[id]; else el.value = d[id];
+    });
+    if (state.tpl === "t2") {
+      state.t2stats = [
+        { v: "12 часов", l: "тепло без подогрева" }, { v: "24 часа", l: "холод в жару" },
+        { v: "450 мл", l: "помещается в подстаканник" }, { v: "450 г", l: "вес пустой кружки" },
+        { v: "Сталь 304", l: "пищевая, без запаха" }, { v: "Не течёт", l: "герметичная крышка" }
+      ];
+      renderT2Rows();
+    }
+    render();
+  });
+
+  // ── экспорт ──────────────────────────────────────────────
+  var NAMES = { t1: "card-glavnoe.png", t2: "card-harakteristiki.png", t3: "card-sravnenie.png" };
+  document.getElementById("dlBtn").addEventListener("click", function () {
+    cv.toBlob(function (blob) {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = NAMES[state.tpl];
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    }, "image/png");
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
