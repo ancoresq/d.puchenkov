@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Карточки для Ozon и WB — демо-проект D.PUCHENKOV</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Демонстрационный комплект инфографики для карточки товара: главный кадр, характеристики, сравнение до/после.">
+<meta name="theme-color" content="#08090a">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2308090a'/%3E%3Ctext x='32' y='44' font-family='system-ui,sans-serif' font-size='34' font-weight='700' fill='%23eceae4' text-anchor='middle'%3ED%3C/text%3E%3Ccircle cx='47' cy='40' r='3.4' fill='%235b93bd'/%3E%3C/svg%3E">
+<style>
+  /* Страница живёт отдельно от index.html — тот же приём, что у
+     404.html и privacy.html: свои стили внутри файла, ни одного
+     внешнего запроса. */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #08090a; color: #eceae4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display",
+                 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  a { color: inherit; text-decoration: none; }
+  body { padding: clamp(28px, 6vw, 64px) clamp(20px, 6vw, 24px) 90px; }
+  main { max-width: 1080px; margin: 0 auto; }
+
+  .back {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-bottom: 40px;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, Menlo, monospace;
+    font-size: 13px; letter-spacing: 0.04em; color: #9ea1a3;
+    transition: color 0.3s ease;
+  }
+  .back:hover { color: #8cc0e4; }
+  .back svg { display: block; }
+
+  .kicker {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, Menlo, monospace;
+    font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: #5b93bd; margin: 0 0 14px;
+  }
+  h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; margin: 0 0 14px; }
+  .lede { max-width: 62ch; margin: 0 0 16px; color: #9ea1a3; font-size: 16px; line-height: 1.6; }
+
+  .demo-note {
+    display: inline-flex; align-items: center; gap: 10px;
+    margin-bottom: 56px; padding: 12px 18px;
+    border: 1px solid #1e2225; border-radius: 10px;
+    background: #101214;
+    font-size: 13.5px; color: #9ea1a3; line-height: 1.5;
+  }
+  .demo-note b { color: #eceae4; }
+
+  .gallery { display: flex; flex-direction: column; gap: 64px; }
+  .item { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(28px, 4vw, 56px); align-items: center; }
+  .item:nth-child(even) { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); }
+  .item:nth-child(even) .shot { order: 2; }
+  @media (max-width: 780px) {
+    .item, .item:nth-child(even) { grid-template-columns: 1fr; }
+    .item:nth-child(even) .shot { order: 0; }
+  }
+
+  .shot {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid #1e2225;
+    background: #101214;
+    box-shadow: 0 30px 70px -30px rgba(0,0,0,0.7);
+  }
+  .shot img { display: block; width: 100%; }
+
+  .num { font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, Menlo, monospace;
+    font-size: 12px; letter-spacing: 0.14em; color: #74797e; margin: 0 0 12px; }
+  .item h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.015em; margin: 0 0 12px; }
+  .item p { font-size: 15px; line-height: 1.65; color: #9ea1a3; margin: 0; max-width: 46ch; }
+
+  footer { margin-top: 80px; padding-top: 26px; border-top: 1px solid #1e2225; }
+  footer p { font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, Menlo, monospace;
+    font-size: 11.5px; line-height: 1.6; color: #74797e; max-width: 70ch; }
+  footer a { color: #5b93bd; text-decoration: underline; text-underline-offset: 3px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+      <path d="M10.5 2.5L2.5 10.5M2.5 10.5H8.5M2.5 10.5V4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    D.PUCHENKOV
+  </a>
+
+  <p class="kicker">Инфографика · Ozon и Wildberries</p>
+  <h1>Карточки для термокружки</h1>
+  <p class="lede">Три кадра под требования маркетплейсов: пропорция 3:4, безопасные поля по краям, кегль подписей, читаемый с телефона в ленте выдачи.</p>
+
+  <p class="demo-note"><b>Демонстрационный комплект.</b> Товар вымышленный, кружка — рендер, не фотосъёмка реального изделия.</p>
+
+  <div class="gallery">
+    <article class="item">
+      <div class="shot"><img src="card-1-glavnoe-foto.jpg" alt="Главный кадр карточки: термокружка на нейтральном фоне, плашка «Хит продаж», ключевые цифры внизу" loading="lazy"></div>
+      <div>
+        <p class="num">01 / 03 — главный кадр</p>
+        <h2>Что это и какого размера</h2>
+        <p>Первый кадр в выдаче отвечает на два вопроса ещё до клика: что за товар и на что он способен. Название и объём — крупно, внизу, без прищура.</p>
+      </div>
+    </article>
+
+    <article class="item">
+      <div class="shot"><img src="card-2-harakteristiki.jpg" alt="Карточка характеристик: время удержания тепла и холода, объём, вес, материал, гарантия" loading="lazy"></div>
+      <div>
+        <p class="num">02 / 03 — характеристики</p>
+        <h2>Все цифры в одном месте</h2>
+        <p>Шесть плашек вместо простыни текста в описании — то, что обычно ищут в отзывах и вопросах, вынесено на сам кадр.</p>
+      </div>
+    </article>
+
+    <article class="item">
+      <div class="shot"><img src="card-3-sravnenie.jpg" alt="Карточка сравнения: обычная кружка и термокружка бок о бок" loading="lazy"></div>
+      <div>
+        <p class="num">03 / 03 — сравнение</p>
+        <h2>До и после — рядом</h2>
+        <p>Приём, который проще любого текста: слабые стороны обычной кружки и то, что решает термокружка, — в одном кадре, без пролистывания.</p>
+      </div>
+    </article>
+  </div>
+
+  <footer>
+    <p>Демонстрационный проект из портфолио <a href="/">D.PUCHENKOV</a>. Товар, цифры и бренд вымышлены и созданы для показа вёрстки — карточки не публиковались на маркетплейсах. Страница закрыта от индексации.</p>
+  </footer>
+</main>
+</body>
+</html>
