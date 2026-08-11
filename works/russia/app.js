@@ -307,7 +307,7 @@ pol.build = function () {
   /* Штриховка спорных территорий идёт отдельным слоем поверх заливки:
      так она не мешает подсветке при наведении. */
   for (i = 0; i < list.length; i++) {
-    if (list[i].d) put(this.marks, list[i].p, 'disp');
+    if (list[i].dis) put(this.marks, list[i].p, 'disp');
   }
 
   for (i = 0; i < list.length; i++) {
@@ -546,14 +546,7 @@ function select(feat) {
   if (feat.cap) row('Столица', feat.cap);
   if (feat.fdName) row('Округ', feat.fdName);
   if (feat.t && TYPE[feat.t]) row('Статус', TYPE[feat.t]);
-  if (feat.len) row('Длина в кадре', Math.round(feat.len) + ' ед.');
 
-  card.classList.toggle('disputed', !!feat.d);
-  if (feat.d) {
-    $('card-flag').textContent =
-      'Показано в составе России согласно её законодательству. ' +
-      'Большинство государств — членов ООН считает эту территорию украинской.';
-  }
   card.classList.add('on');
 }
 
@@ -757,7 +750,7 @@ var LEGENDS = {
       'Столицы субъектов'));
     box.appendChild(keyRow('', 'background-image:repeating-linear-gradient(45deg,' +
       'var(--text-dim) 0 2px,transparent 2px 5px)', 'Спорный статус'));
-    box.appendChild(note('Крым, Севастополь, ДНР, ЛНР, Запорожская и Херсонская области показаны в составе Российской Федерации согласно её законодательству. Большинство государств — членов ООН признаёт эти территории украинскими.'));
+    box.appendChild(note('Подписи субъектов и столиц появляются по мере приближения: на общем виде показаны только крупнейшие.'));
   }
 };
 

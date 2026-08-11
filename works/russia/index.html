@@ -636,19 +636,6 @@ html[data-theme="light"] .ico .moon { display: none; }
   color: var(--text-mute); cursor: pointer;
 }
 .card .close:hover { background: var(--line); color: var(--text); }
-.card .flag {
-  margin-top: var(--sp-4);
-  padding: 9px 11px;
-  border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--warn) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--warn) 34%, transparent);
-  color: var(--text-dim);
-  font-size: 12px;
-  line-height: 1.45;
-  display: none;
-}
-.card.disputed .flag { display: block; }
-
 /* Управление масштабом */
 .zoom {
   right: var(--sp-4);
@@ -856,7 +843,6 @@ html[data-theme="light"] .ico .moon { display: none; }
       <div class="kind" id="card-kind"></div>
       <h2 id="card-name"></h2>
       <dl id="card-rows"></dl>
-      <p class="flag" id="card-flag"></p>
     </aside>
 
     <div class="panel zoom" role="group" aria-label="Масштаб карты">
