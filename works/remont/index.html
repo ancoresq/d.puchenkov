@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>УРОВЕНЬ — ремонт квартир под ключ | Демо-проект D.PUCHENKOV</title>
+
+<!-- Страница намеренно закрыта от индексации. Компания вымышленная:
+     если бы демо ранжировалось по запросу «ремонт квартир», человек
+     искал бы бригаду и попал на несуществующую. Плашка сверху
+     говорит о том же прямо, для тех кто пришёл по ссылке. -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Демонстрационный лендинг из портфолио D.PUCHENKOV: квиз-калькулятор ремонта, шесть вопросов и вилка цены на экране.">
+<meta name="theme-color" content="#141619">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23141619'/%3E%3Crect x='10' y='26' width='44' height='12' rx='3' fill='none' stroke='%23e8eaec' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='3.4' fill='%23ea580c'/%3E%3C/svg%3E">
+
+<style>
+  /* ═══════════════════════════════════════════════════════════
+     УРОВЕНЬ · квиз-калькулятор ремонта
+     Демо-работа для портфолио. Всё нативно: ни одной внешней
+     библиотеки, ни одного сетевого запроса, ни одной картинки
+     файлом. Фон, иконки и «чертёжная» сетка нарисованы кодом —
+     страница остаётся одним файлом и открывается даже без сети.
+
+     ЧТО ГДЕ ПРАВИТЬ:
+      · Цвета ......... блок :root ниже
+      · Вопросы квиза . массив STEPS в скрипте внизу файла
+      · Цены .......... объект PRICE там же, рядом со STEPS
+      · Тексты ........ в разметке, ищи пометки «РАЗДЕЛ:»
+     ═══════════════════════════════════════════════════════════ */
+
+  :root {
+    /* Палитра промышленная: бетонный графит и оранжевый «сигнальный».
+       Такой оранжевый на стройке значит «внимание сюда» — здесь он
+       работает так же и не тратится ни на что, кроме цены и кнопок.
+
+       Контраст проверен на чёрном фоне: text 15.0:1, soft 8.4:1,
+       faint 5.8:1, acc-lit 7.3:1 — все выше нормы 4.5:1.
+       Оранжевую заливку нельзя подписывать белым (3.6:1, ниже нормы),
+       поэтому на кнопках текст тёмный, --on-acc: 5.1:1. */
+    --base:     #141619;
+    --lift:     #1c1f24;
+    --card:     #22262c;
+    --text:     #e8eaec;
+    --soft:     #aab1b8;
+    --faint:    #8b939b;
+    --edge:     #313740;   /* декоративные линии */
+    --edge-lit: #6f7883;   /* границы органов управления, 3.4:1 */
+    --acc:      #ea580c;   /* заливки */
+    --acc-lit:  #f2884a;   /* текст акцентом на тёмном */
+    --on-acc:   #141619;   /* текст на оранжевой заливке */
+    --acc-dim:  rgba(234, 88, 12, 0.12);
+
+    --face: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display",
+            "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, Menlo, monospace;
+
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --gut:  clamp(18px, 5vw, 72px);
+    --demo-h: 38px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--base);
+    color: var(--text);
+    font-family: var(--face);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  :focus-visible {
+    outline: 2px solid var(--acc-lit);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  .shell { width: 100%; max-width: 1220px; margin: 0 auto; padding: 0 var(--gut); }
+
+  /* ── плашка: это демо, а не настоящая бригада ─────────────── */
+  .demo-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 200;
+    height: var(--demo-h);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 16px;
+    background: #0b0c0e;
+    color: var(--soft);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    text-align: center;
+  }
+  .demo-bar b { color: #fff; font-weight: 500; }
+  .demo-bar a {
+    color: var(--acc-lit);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    white-space: nowrap;
+  }
+  @media (max-width: 700px) {
+    .demo-bar { font-size: 10.5px; line-height: 1.3; height: auto; padding: 8px 12px; gap: 6px; flex-wrap: wrap; }
+    /* длинное пояснение съедает третью строку и подпирает шапку —
+       на узком экране оставляем только суть */
+    .demo-bar .long { display: none; }
+    :root { --demo-h: 52px; }
+  }
+
+  /* ── полоса прочтения ─────────────────────────────────────── */
+  .prog {
+    position: fixed;
+    top: var(--demo-h); left: 0;
+    z-index: 199;
+    height: 2px; width: 0;
+    background: var(--acc);
+    transition: width 0.1s linear;
+  }
+
+  /* ── шапка ────────────────────────────────────────────────── */
+  .nav {
+    position: fixed;
+    top: var(--demo-h); left: 0; right: 0;
+    z-index: 150;
+    border-bottom: 1px solid transparent;
+    transition: background 0.45s var(--ease), border-color 0.45s var(--ease),
+                backdrop-filter 0.45s var(--ease);
+  }
+  .nav.stuck {
+    background: rgba(20, 22, 25, 0.86);
+    backdrop-filter: blur(14px) saturate(1.3);
+    -webkit-backdrop-filter: blur(14px) saturate(1.3);
+    border-bottom-color: var(--edge);
+  }
+  .nav-in { display: flex; align-items: center; justify-content: space-between; gap: 20px; height: 72px; }
+  .brand {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-size: 17px; font-weight: 700; letter-spacing: 0.24em;
+  }
+  .brand-mark { flex: none; }
+  .nav-links { display: flex; gap: 30px; font-size: 14.5px; color: var(--soft); }
+  .nav-links a { position: relative; padding: 6px 0; }
+  .nav-links a::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+    background: var(--acc);
+    transform: scaleX(0); transform-origin: right;
+    transition: transform 0.4s var(--ease);
+  }
+  .nav-links a:hover { color: var(--text); }
+  .nav-links a:hover::after { transform: scaleX(1); transform-origin: left; }
+  @media (max-width: 940px) { .nav-links { display: none; } }
+
+  /* ── кнопки ───────────────────────────────────────────────── */
+  .btn {
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+    min-height: 52px; padding: 0 28px;
+    border: 0; border-radius: 3px;
+    background: var(--acc); color: var(--on-acc);
+    font: inherit; font-size: 15.5px; font-weight: 650; letter-spacing: 0.01em;
+    cursor: pointer; overflow: hidden;
+    transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), background 0.2s;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 16px 34px -14px rgba(234, 88, 12, 0.9); }
+  .btn:active { transform: translateY(0) scale(0.99); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn svg { transition: transform 0.3s var(--ease); }
+  .btn:hover:not(:disabled) svg { transform: translateX(3px); }
+  .btn-sm { min-height: 46px; padding: 0 22px; font-size: 14.5px; }
+
+  .btn-ghost {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 52px; padding: 0 24px;
+    border: 1px solid var(--edge-lit); border-radius: 3px;
+    background: transparent; color: var(--text);
+    font: inherit; font-size: 15px; cursor: pointer;
+    transition: border-color 0.25s, background 0.25s, transform 0.3s var(--ease);
+  }
+  .btn-ghost:hover { border-color: var(--acc-lit); background: var(--acc-dim); }
+  .btn-ghost:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* ── появление при прокрутке ──────────────────────────────── */
+  .rise { opacity: 0; transform: translateY(26px); transition: opacity 0.8s var(--ease), transform 0.8s var(--ease); }
+  .rise.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .rise { opacity: 1; transform: none; transition: none; }
+  }
+
+  /* ── общая типографика секций ─────────────────────────────── */
+  section { position: relative; }
+  .kicker {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--acc-lit);
+    margin: 0 0 18px;
+  }
+  .kicker::before { content: ""; width: 26px; height: 1px; background: var(--acc); }
+  h1, h2, h3 { margin: 0; font-weight: 680; letter-spacing: -0.02em; line-height: 1.1; }
+  h2 { font-size: clamp(28px, 4.2vw, 44px); }
+  .lede { color: var(--soft); font-size: clamp(16px, 1.7vw, 18.5px); line-height: 1.62; }
+
+  /* ── ГЕРОЙ ────────────────────────────────────────────────── */
+  .hero { padding: calc(var(--demo-h) + 108px) 0 90px; position: relative; overflow: hidden; }
+  /* «чертёжная» сетка вместо фотографии: тема строительная, а
+     любая стоковая картинка ремонта выглядит как чужая работа */
+  .hero::before {
+    content: ""; position: absolute; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(120% 90% at 20% 0%, #000 20%, transparent 78%);
+    -webkit-mask-image: radial-gradient(120% 90% at 20% 0%, #000 20%, transparent 78%);
+  }
+  .hero::after {
+    content: ""; position: absolute; z-index: 0;
+    width: 620px; height: 620px; right: -180px; top: -220px;
+    background: radial-gradient(circle, rgba(234,88,12,0.16), transparent 62%);
+    pointer-events: none;
+  }
+  .hero-in {
+    position: relative; z-index: 1;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 560px);
+    gap: clamp(36px, 5vw, 72px); align-items: start;
+  }
+  @media (max-width: 1000px) { .hero-in { grid-template-columns: 1fr; } }
+
+  h1 { font-size: clamp(34px, 5.4vw, 60px); }
+  h1 em { font-style: normal; color: var(--acc-lit); }
+  .hero-lede { margin: 24px 0 0; max-width: 30em; }
+
+  /* три колонки принудительно: на flex-basis карточки разъезжались
+     2+1, потому что длинная подпись задаёт свою минимальную ширину */
+  .facts {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px; margin: 34px 0 0; padding: 0; list-style: none;
+  }
+  @media (max-width: 520px) {
+    .facts { grid-template-columns: 1fr 1fr; }
+    .facts li:last-child { grid-column: 1 / -1; }  /* иначе третья висит полупустой строкой */
+  }
+  .facts li {
+    min-width: 0;
+    padding: 16px 18px;
+    border: 1px solid var(--edge); border-radius: 3px;
+    background: linear-gradient(160deg, var(--lift), var(--base));
+  }
+  .facts b { display: block; font-size: 25px; letter-spacing: -0.02em; }
+  .facts span { display: block; margin-top: 4px; font-size: 13px; color: var(--faint); line-height: 1.4; }
+
+  /* ── КВИЗ ─────────────────────────────────────────────────── */
+  .quiz {
+    border: 1px solid var(--edge); border-radius: 5px;
+    background: var(--card);
+    box-shadow: 0 40px 80px -40px rgba(0,0,0,0.9);
+    overflow: hidden;
+  }
+  .quiz-top { padding: 22px 24px 0; }
+
+  /* рельс прогресса: пройденные шаги кликабельны — вернуться
+     к третьему вопросу можно сразу, а не пятью нажатиями «назад» */
+  .rail { display: flex; gap: 6px; margin: 0 0 16px; padding: 0; list-style: none; }
+  .rail li { flex: 1; }
+  .rail button {
+    display: block; width: 100%; height: 30px; padding: 0;
+    border: 0; background: none; cursor: default;
+  }
+  .rail button[data-done="1"] { cursor: pointer; }
+  .rail i {
+    display: block; height: 3px; border-radius: 2px;
+    background: var(--edge);
+    transition: background 0.35s var(--ease), transform 0.35s var(--ease);
+    transform-origin: left;
+  }
+  .rail button[data-done="1"] i { background: var(--acc); }
+  .rail button[data-now="1"] i { background: var(--acc-lit); }
+  .rail button[data-done="1"]:hover i { transform: scaleY(2); }
+
+  .quiz-meta {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--faint);
+  }
+
+  .quiz-body { position: relative; overflow: hidden; transition: height 0.42s var(--ease); }
+  .quiz-pane { padding: 20px 24px 24px; }
+
+  /* направленный переход: панель приезжает с той стороны, в
+     которую человек движется по квизу — назад и вперёд ощущаются
+     по-разному, это дешёвая, но честная подсказка о направлении */
+  @keyframes pane-next { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+  @keyframes pane-prev { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: none; } }
+  .quiz-pane.next { animation: pane-next 0.4s var(--ease) both; }
+  .quiz-pane.prev { animation: pane-prev 0.4s var(--ease) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .quiz-body { transition: none; }
+    .quiz-pane.next, .quiz-pane.prev { animation: none; }
+  }
+
+  .q-title { font-size: clamp(20px, 2.4vw, 25px); margin: 0 0 8px; }
+  .q-hint { margin: 0 0 20px; font-size: 14.5px; color: var(--faint); line-height: 1.5; }
+
+  .opts { display: grid; gap: 9px; margin: 0; padding: 0; border: 0; }
+  .opt {
+    position: relative;
+    display: flex; align-items: flex-start; gap: 13px;
+    width: 100%; min-height: 56px; padding: 14px 16px;
+    border: 1px solid var(--edge-lit); border-radius: 4px;
+    background: var(--lift); color: inherit;
+    font: inherit; text-align: left; cursor: pointer;
+    transition: border-color 0.22s, background 0.22s, transform 0.22s var(--ease);
+  }
+  .opt:hover { border-color: var(--acc-lit); background: #262b31; }
+  .opt:active { transform: scale(0.995); }
+  .opt[aria-checked="true"] { border-color: var(--acc); background: var(--acc-dim); }
+  .opt-tick {
+    flex: none; width: 20px; height: 20px; margin-top: 1px;
+    border: 1.5px solid var(--edge-lit); border-radius: 50%;
+    display: grid; place-items: center;
+    transition: border-color 0.22s, background 0.22s;
+  }
+  .opt[aria-checked="true"] .opt-tick { border-color: var(--acc); background: var(--acc); }
+  .opt-tick svg { opacity: 0; transform: scale(0.5); transition: opacity 0.2s, transform 0.28s var(--ease); }
+  .opt[aria-checked="true"] .opt-tick svg { opacity: 1; transform: none; }
+  .opt-t { display: block; font-size: 15.5px; font-weight: 600; }
+  .opt-d { display: block; margin-top: 3px; font-size: 13.5px; color: var(--faint); line-height: 1.45; }
+
+  /* шаг с площадью */
+  .area-val { font-family: var(--mono); font-size: 40px; letter-spacing: -0.02em; color: var(--text); }
+  .area-val span { font-size: 17px; color: var(--faint); margin-left: 4px; }
+  .area-row { display: flex; align-items: center; gap: 14px; margin: 4px 0 22px; }
+  .area-num {
+    width: 118px; min-height: 52px; padding: 0 14px;
+    border: 1px solid var(--edge-lit); border-radius: 4px;
+    background: var(--lift); color: var(--text);
+    font-family: var(--mono); font-size: 22px; text-align: center;
+  }
+  .area-num:focus { border-color: var(--acc); outline: none; }
+  input[type="range"] {
+    flex: 1; min-width: 0; height: 44px; margin: 0;
+    background: none; -webkit-appearance: none; appearance: none; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px; background: var(--edge-lit);
+  }
+  input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--edge-lit); }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 26px; height: 26px; margin-top: -11px;
+    border: 0; border-radius: 50%; background: var(--acc);
+    box-shadow: 0 0 0 4px rgba(234,88,12,0.18);
+    transition: box-shadow 0.2s, transform 0.2s var(--ease);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 26px; height: 26px; border: 0; border-radius: 50%; background: var(--acc);
+    box-shadow: 0 0 0 4px rgba(234,88,12,0.18);
+  }
+  input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.08); }
+  input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px rgba(234,88,12,0.32); }
+  .area-marks {
+    display: flex; justify-content: space-between;
+    font-family: var(--mono); font-size: 11.5px; color: var(--faint);
+    margin-top: -6px;
+  }
+
+  /* подвал квиза: вилка цены и навигация */
+  .quiz-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--edge);
+    background: var(--lift);
+  }
+  .price-live { min-width: 0; }
+  .price-cap {
+    display: block; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
+  }
+  .price-num {
+    display: block; margin-top: 3px;
+    font-size: clamp(17px, 2.3vw, 22px); font-weight: 680; letter-spacing: -0.02em;
+    color: var(--acc-lit); white-space: nowrap;
+  }
+  .price-num.idle { color: var(--faint); font-weight: 500; font-size: 14.5px; letter-spacing: 0; }
+  .quiz-nav { display: flex; gap: 8px; flex: none; }
+  .quiz-nav .btn-ghost, .quiz-nav .btn { min-height: 46px; padding: 0 18px; font-size: 14.5px; }
+  @media (max-width: 420px) {
+    .quiz-foot { flex-wrap: wrap; }
+    .quiz-nav { width: 100%; }
+    .quiz-nav .btn { flex: 1; }
+  }
+
+  /* ── экран результата ─────────────────────────────────────── */
+  .res-num {
+    font-size: clamp(25px, 3.6vw, 36px); font-weight: 700; letter-spacing: -0.03em;
+    color: var(--acc-lit); line-height: 1.1;
+  }
+  .res-sub { margin: 8px 0 20px; font-size: 14.5px; color: var(--faint); }
+  .res-list { margin: 0 0 22px; padding: 0; list-style: none; border-top: 1px solid var(--edge); }
+  .res-list li {
+    display: flex; justify-content: space-between; gap: 16px;
+    padding: 10px 0; border-bottom: 1px solid var(--edge);
+    font-size: 14px;
+  }
+  .res-list dt, .res-list .k { color: var(--faint); }
+  .res-list .v { color: var(--text); text-align: right; font-weight: 550; }
+
+  .fields { display: grid; gap: 12px; margin: 0 0 14px; }
+  @media (min-width: 540px) { .fields { grid-template-columns: 1fr 1fr; } }
+  .field label {
+    display: block; margin-bottom: 6px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--faint);
+  }
+  .field input {
+    width: 100%; min-height: 52px; padding: 0 15px;
+    border: 1px solid var(--edge-lit); border-radius: 4px;
+    background: var(--lift); color: var(--text);
+    font: inherit; font-size: 15.5px;
+    transition: border-color 0.2s;
+  }
+  .field input:focus { border-color: var(--acc); outline: none; }
+  .field input[aria-invalid="true"] { border-color: #f2705c; }
+  .field .err { display: none; margin: 6px 0 0; font-size: 12.5px; color: #f2937f; }
+  .field input[aria-invalid="true"] ~ .err { display: block; }
+  .fine { margin: 12px 0 0; font-size: 12.5px; color: var(--faint); line-height: 1.5; }
+
+  /* ── СЕКЦИИ НИЖЕ ──────────────────────────────────────────── */
+  .band { padding: clamp(72px, 9vw, 116px) 0; }
+  .band + .band { border-top: 1px solid var(--edge); }
+  .head { max-width: 40em; margin: 0 0 clamp(34px, 4.5vw, 54px); }
+  .head .lede { margin: 16px 0 0; }
+
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 14px; }
+  .cell {
+    padding: 26px 24px 28px;
+    border: 1px solid var(--edge); border-radius: 4px;
+    background: linear-gradient(165deg, var(--lift), var(--base));
+    transition: border-color 0.35s var(--ease), transform 0.45s var(--ease);
+  }
+  .cell:hover { border-color: var(--edge-lit); transform: translateY(-3px); }
+  .cell-ico {
+    display: grid; place-items: center;
+    width: 42px; height: 42px; margin-bottom: 18px;
+    border: 1px solid var(--acc); border-radius: 3px;
+    background: var(--acc-dim); color: var(--acc-lit);
+  }
+  .cell h3 { font-size: 18px; margin-bottom: 9px; }
+  .cell p { margin: 0; font-size: 14.5px; color: var(--soft); line-height: 1.6; }
+
+  /* этапы работы */
+  .steps { counter-reset: st; display: grid; gap: 0; }
+  .st {
+    display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: clamp(16px, 3vw, 40px);
+    padding: 26px 0; border-top: 1px solid var(--edge);
+  }
+  .st:last-child { border-bottom: 1px solid var(--edge); }
+  .st-n {
+    counter-increment: st;
+    font-family: var(--mono); font-size: 13px; color: var(--acc-lit); padding-top: 4px;
+  }
+  .st-n::before { content: "0" counter(st); }
+  .st h3 { font-size: clamp(19px, 2.2vw, 23px); margin-bottom: 8px; }
+  .st p { margin: 0; color: var(--soft); font-size: 15px; line-height: 1.62; max-width: 52em; }
+  @media (max-width: 560px) { .st { grid-template-columns: 1fr; gap: 8px; } .st-n { padding-top: 0; } }
+
+  /* вопросы */
+  .faq { border-top: 1px solid var(--edge); }
+  .faq details { border-bottom: 1px solid var(--edge); }
+  .faq summary {
+    display: flex; align-items: center; justify-content: space-between; gap: 18px;
+    min-height: 64px; padding: 18px 0;
+    font-size: clamp(16px, 1.9vw, 18.5px); font-weight: 600;
+    cursor: pointer; list-style: none;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary:hover { color: var(--acc-lit); }
+  .faq .sign { flex: none; position: relative; width: 14px; height: 14px; }
+  .faq .sign::before, .faq .sign::after {
+    content: ""; position: absolute; left: 0; top: 6px; width: 14px; height: 2px;
+    background: var(--acc); transition: transform 0.32s var(--ease);
+  }
+  .faq .sign::after { transform: rotate(90deg); }
+  .faq details[open] .sign::after { transform: rotate(0); }
+  .faq p { margin: 0 0 22px; color: var(--soft); font-size: 15px; line-height: 1.65; max-width: 56em; }
+
+  /* финальный призыв */
+  .cta-band { text-align: center; }
+  .cta-band .lede { margin: 18px auto 30px; max-width: 34em; }
+
+  /* подвал */
+  footer { padding: 54px 0 40px; border-top: 1px solid var(--edge); }
+  .foot { display: flex; flex-wrap: wrap; gap: 22px; align-items: center; justify-content: space-between; }
+  .foot-b { font-size: 16px; font-weight: 700; letter-spacing: 0.24em; }
+  .foot-links { display: flex; flex-wrap: wrap; gap: 22px; font-size: 14px; color: var(--soft); }
+  .foot-links a:hover { color: var(--acc-lit); }
+  .foot-note {
+    width: 100%; margin: 28px 0 0; padding-top: 22px;
+    border-top: 1px solid var(--edge);
+    font-size: 13px; color: var(--faint); line-height: 1.6;
+  }
+  .foot-note a { color: var(--acc-lit); text-decoration: underline; text-underline-offset: 3px; }
+
+  .sr {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+</style>
+</head>
+<body>
+
+<!-- честная плашка: страница выглядит как настоящий сайт бригады,
+     и человек должен сразу понимать, что заявку тут не примут -->
+<div class="demo-bar">
+  <span><b>Демонстрационный проект</b><span class="long"> — компания вымышленная, заявка никуда не уходит</span></span>
+  <a href="https://puchenkoff.ru/">К портфолио D.PUCHENKOV →</a>
+</div>
+
+<div class="prog" id="prog"></div>
+
+<header class="nav" id="nav">
+  <div class="shell nav-in">
+    <a class="brand" href="#top">
+      <svg class="brand-mark" width="26" height="16" viewBox="0 0 26 16" fill="none" aria-hidden="true">
+        <rect x="1" y="1" width="24" height="14" rx="2.5" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="13" cy="8" r="2.6" fill="#ea580c"/>
+      </svg>
+      УРОВЕНЬ
+    </a>
+    <nav class="nav-links">
+      <a href="#raschet">Расчёт</a>
+      <a href="#vhodit">Что входит</a>
+      <a href="#etapy">Этапы</a>
+      <a href="#vopros">Вопросы</a>
+    </nav>
+    <a class="btn btn-sm" href="#raschet">
+      Узнать цену
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+        <path d="M2.5 6.5h8M7 3l3.5 3.5L7 10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- РАЗДЕЛ: первый экран и калькулятор ─────────────────────── -->
+  <section class="hero" id="raschet">
+    <div class="shell hero-in">
+
+      <div>
+        <p class="kicker">Ремонт квартир под ключ</p>
+        <h1>Цена — <em>до начала работ</em>, а не в середине</h1>
+        <p class="lede hero-lede">
+          Шесть вопросов вместо разговора «пришлите планировку, мы посчитаем».
+          Вилка пересчитывается на каждом шаге: сразу видно, что именно её двигает
+          и на сколько.
+        </p>
+
+        <ul class="facts">
+          <li>
+            <b>12 лет</b>
+            <span>на объектах, своя бригада без субподряда</span>
+          </li>
+          <li>
+            <b>340</b>
+            <span>квартир сдано с подписанным актом</span>
+          </li>
+          <li>
+            <b>±8&nbsp;%</b>
+            <span>расхождение итоговой сметы с расчётом</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Калькулятор собирается скриптом из массива STEPS: разметка
+           тут только каркас, вопросы и цены правятся в одном месте -->
+      <div class="quiz" id="quiz">
+        <div class="quiz-top">
+          <ul class="rail" id="rail"></ul>
+          <div class="quiz-meta">
+            <span id="step-of"></span>
+            <span id="step-left"></span>
+          </div>
+        </div>
+
+        <div class="quiz-body" id="body">
+          <div class="quiz-pane" id="pane"></div>
+        </div>
+
+        <div class="quiz-foot">
+          <div class="price-live">
+            <span class="price-cap">Предварительно</span>
+            <!-- aria-live: человек, который слушает страницу с экранным
+                 диктором, должен услышать, что цена изменилась -->
+            <strong class="price-num idle" id="price" aria-live="polite">ответьте на первый вопрос</strong>
+          </div>
+          <div class="quiz-nav">
+            <button class="btn-ghost" id="back" type="button" disabled>Назад</button>
+            <button class="btn" id="next" type="button" disabled>
+              Далее
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                <path d="M2.5 6.5h8M7 3l3.5 3.5L7 10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- РАЗДЕЛ: что входит в вилку ─────────────────────────────── -->
+  <section class="band" id="vhodit">
+    <div class="shell">
+      <div class="head rise">
+        <p class="kicker">Что входит в вилку</p>
+        <h2>Считаем работы целиком, а не «от&nbsp;1&nbsp;500&nbsp;₽ за&nbsp;квадрат»</h2>
+        <p class="lede">
+          Нижняя граница — это ремонт без сюрпризов на простой планировке.
+          Верхняя — та же квартира со сложными узлами и дорогой отделкой.
+          Обе цифры честные, поэтому между ними есть расстояние.
+        </p>
+      </div>
+
+      <div class="grid3">
+        <article class="cell rise">
+          <span class="cell-ico" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
+              <path d="M3 17h14M5 17V8l5-4 5 4v9" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M8.5 17v-4h3v4" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <h3>Работы и материалы</h3>
+          <p>
+            Черновые материалы посчитаны внутри вилки: смеси, профиль, крепёж,
+            расходники. Чистовую отделку вы выбираете сами — она вынесена
+            отдельной строкой, чтобы её можно было менять без пересчёта всего.
+          </p>
+        </article>
+
+        <article class="cell rise">
+          <span class="cell-ico" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
+              <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M3 8h14M8 8v9" stroke="currentColor" stroke-width="1.6"/>
+            </svg>
+          </span>
+          <h3>Вывоз и уборка</h3>
+          <p>
+            Демонтаж, мешки, подъём и вывоз мусора уже в смете. Это первая
+            строка, которую обычно «забывают» в дешёвом расчёте, а потом
+            добавляют по факту — на этом смета и вырастает.
+          </p>
+        </article>
+
+        <article class="cell rise">
+          <span class="cell-ico" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
+              <path d="M10 2.5l6.5 3v5c0 3.6-2.6 6.4-6.5 7.5-3.9-1.1-6.5-3.9-6.5-7.5v-5l6.5-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M7.4 10l1.9 1.9 3.5-3.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <h3>Гарантия два года</h3>
+          <p>
+            На скрытые работы — стяжку, штукатурку, электрику и разводку воды.
+            Треснула стяжка на второй год — переделываем за свой счёт, это
+            записано в договоре, а не в обещании на сайте.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- РАЗДЕЛ: этапы ──────────────────────────────────────────── -->
+  <section class="band" id="etapy">
+    <div class="shell">
+      <div class="head rise">
+        <p class="kicker">Как идёт работа</p>
+        <h2>Четыре этапа, на каждом видно, за что заплачено</h2>
+      </div>
+
+      <div class="steps">
+        <article class="st rise">
+          <div class="st-n"></div>
+          <div>
+            <h3>Замер и смета</h3>
+            <p>
+              Приезжаем, меряем, смотрим стены и коммуникации. Через два дня
+              присылаем смету построчно: работа, материал, количество. Расчёт
+              с этой страницы — отправная точка, замер её уточняет.
+            </p>
+          </div>
+        </article>
+
+        <article class="st rise">
+          <div class="st-n"></div>
+          <div>
+            <h3>Договор и график</h3>
+            <p>
+              В договоре зафиксированы сумма, сроки и порядок оплаты по этапам.
+              Аванс — только на материалы под первый этап. Работу оплачиваете
+              после того, как этап принят.
+            </p>
+          </div>
+        </article>
+
+        <article class="st rise">
+          <div class="st-n"></div>
+          <div>
+            <h3>Работы и отчёт</h3>
+            <p>
+              Раз в неделю — фотоотчёт и остаток по смете в общем чате.
+              Скрытые работы снимаем до того, как их закроет отделка:
+              потом это не проверить ни вам, ни нам.
+            </p>
+          </div>
+        </article>
+
+        <article class="st rise">
+          <div class="st-n"></div>
+          <div>
+            <h3>Приёмка</h3>
+            <p>
+              Проходим квартиру с листом замечаний. Всё, что записано,
+              устраняем до подписания акта — акт закрывает объект, а не
+              открывает переписку про недоделки.
+            </p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- РАЗДЕЛ: вопросы ────────────────────────────────────────── -->
+  <section class="band" id="vopros">
+    <div class="shell">
+      <div class="head rise">
+        <p class="kicker">Вопросы</p>
+        <h2>О чём спрашивают до звонка</h2>
+      </div>
+
+      <div class="faq rise">
+        <details>
+          <summary>Насколько расчёт совпадёт с итоговой сметой?<span class="sign" aria-hidden="true"></span></summary>
+          <p>
+            По прошлым объектам расхождение держится в пределах восьми процентов.
+            Расчёт не видит того, что видно на замере: кривизну стен, состояние
+            проводки, что осталось от прошлого ремонта. Поэтому это вилка, а не цена.
+          </p>
+        </details>
+        <details>
+          <summary>Можно ли покупать материалы самому?<span class="sign" aria-hidden="true"></span></summary>
+          <p>
+            Чистовую отделку — да, многие так и делают. Черновые материалы берём
+            сами: на них есть гарантия, и если стяжка треснет из-за смеси,
+            разбираться будет не с кем. Наценку на закупку не делаем, отдаём чеки.
+          </p>
+        </details>
+        <details>
+          <summary>Что будет, если сорвёте срок?<span class="sign" aria-hidden="true"></span></summary>
+          <p>
+            В договоре прописана неустойка за каждый день просрочки по нашей вине.
+            Если сроки двигаются из-за смены решения по отделке или задержки
+            поставки, переносим график письменно — по переписке, а не на словах.
+          </p>
+        </details>
+        <details>
+          <summary>Работаете со вторичкой и старым фондом?<span class="sign" aria-hidden="true"></span></summary>
+          <p>
+            Да, и на таких объектах вилка обычно ближе к верхней границе: под
+            обоями и линолеумом чаще всего оказывается больше работы, чем видно
+            на первый взгляд. Это мы говорим до договора, а не после демонтажа.
+          </p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- РАЗДЕЛ: финальный призыв ───────────────────────────────── -->
+  <section class="band cta-band">
+    <div class="shell rise">
+      <h2>Посчитайте свою квартиру</h2>
+      <p class="lede">
+        Сорок секунд, шесть вопросов, никакого «оставьте номер, и мы всё расскажем».
+        Контакты спросим последними — когда цена уже будет на экране.
+      </p>
+      <a class="btn" href="#raschet">
+        К расчёту
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+          <path d="M2.5 6.5h8M7 3l3.5 3.5L7 10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="shell">
+    <div class="foot">
+      <span class="foot-b">УРОВЕНЬ</span>
+      <div class="foot-links">
+        <a href="#raschet">Расчёт</a>
+        <a href="#vhodit">Что входит</a>
+        <a href="#etapy">Этапы</a>
+        <a href="#vopros">Вопросы</a>
+      </div>
+    </div>
+    <p class="foot-note">
+      Демонстрационный проект из портфолио <a href="https://puchenkoff.ru/">D.PUCHENKOV</a>.
+      Компания вымышленная, цены условные, форма ничего не отправляет.
+      Страница собрана одним файлом без внешних библиотек и запросов.
+    </p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var slow = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ══ ВОПРОСЫ КВИЗА ═══════════════════════════════════════════
+     Порядок в массиве = порядок на экране. Чтобы убрать вопрос,
+     удали объект; чтобы добавить — допиши, рельс прогресса и
+     счётчик шагов подстроятся сами.
+
+     У каждого шага:
+       id    ключ ответа, по нему считается цена (см. PRICE)
+       q     сам вопрос
+       hint  строка под вопросом: зачем мы это спрашиваем
+       opts  варианты: v — значение, t — заголовок, d — пояснение
+       kind  "range" вместо opts рисует ползунок площади
+     ═══════════════════════════════════════════════════════════ */
+  var STEPS = [
+    {
+      id: "type",
+      q: "Какой ремонт нужен?",
+      hint: "Главный вопрос: от него зависит и состав работ, и всё остальное в расчёте.",
+      opts: [
+        { v: "cosm",  t: "Косметический", d: "Обои, полы, потолки. Стены ровные, коммуникации не трогаем." },
+        { v: "cap",   t: "Капитальный",   d: "Со стяжкой, штукатуркой и заменой коммуникаций." },
+        { v: "design",t: "Дизайнерский",  d: "По проекту: перепланировка, сложные узлы, ниши и свет." }
+      ]
+    },
+    {
+      id: "area",
+      kind: "range",
+      q: "Какая площадь?",
+      hint: "Общая площадь квартиры по документам — с коридором и санузлом.",
+      min: 20, max: 200, step: 1, def: 45, unit: "м²"
+    },
+    {
+      id: "bath",
+      q: "Санузел трогаем?",
+      hint: "Самая дорогая комната на квадратный метр: гидроизоляция, плитка, разводка.",
+      opts: [
+        { v: "none", t: "Не трогаем",       d: "Санузел остаётся как есть." },
+        { v: "one",  t: "Один санузел",     d: "Полностью: демонтаж, гидроизоляция, плитка, сантехника." },
+        { v: "two",  t: "Два санузла",      d: "Совмещённый и гостевой либо раздельный." }
+      ]
+    },
+    {
+      id: "comm",
+      q: "Что с электрикой и водой?",
+      hint: "В домах старше двадцати лет это обычно не выбор, а необходимость.",
+      opts: [
+        { v: "full", t: "Менять полностью", d: "Новая разводка по квартире, щиток, трубы." },
+        { v: "part", t: "Частично",         d: "Добавить розетки и линии там, где не хватает." },
+        { v: "none", t: "Не нужно",         d: "Всё меняли недавно, оставляем." }
+      ]
+    },
+    {
+      id: "term",
+      q: "Когда начинать?",
+      hint: "Срочный выход — это вторая смена и работа в выходные, она стоит дороже.",
+      opts: [
+        { v: "calm", t: "Не горит",          d: "Готовы подождать очереди месяц-полтора." },
+        { v: "norm", t: "В течение месяца",  d: "Обычный график, стандартная бригада." },
+        { v: "fast", t: "Срочно",            d: "Выходим на неделе, работаем в две смены." }
+      ]
+    },
+    {
+      id: "fin",
+      q: "Уровень отделки?",
+      hint: "Речь про чистовые материалы: плитку, двери, сантехнику, свет.",
+      opts: [
+        { v: "eco",  t: "Эконом",   d: "Российские и белорусские марки, простые решения." },
+        { v: "std",  t: "Стандарт", d: "Средний сегмент, проверенные поставщики." },
+        { v: "prem", t: "Премиум",  d: "Импорт, крупный формат, нестандартные размеры." }
+      ]
+    }
+  ];
+
+  /* ══ ЦЕНЫ ════════════════════════════════════════════════════
+     base и comm — рубли за квадратный метр, парой [низ, верх].
+     bath — фиксированная сумма за санузел целиком.
+     term и fin — множители на всю сумму работ.
+     Цифры условные, демонстрационные: под реальную компанию
+     сюда подставляется её прайс, остальной код не меняется.
+     ═══════════════════════════════════════════════════════════ */
+  var PRICE = {
+    base: { cosm: [4500, 6500],  cap: [9000, 13000], design: [16000, 24000] },
+    comm: { full: [2200, 2900],  part: [900, 1300],  none: [0, 0] },
+    bath: { none: [0, 0],        one: [90000, 130000], two: [170000, 240000] },
+    term: { calm: 0.95, norm: 1, fast: 1.18 },
+    fin:  { eco: 0.88,  std: 1,  prem: 1.35 }
+  };
+
+  /* ── состояние ─────────────────────────────────────────────
+     Ответы живут здесь и не стираются при шаге назад: передумать
+     можно, потерять введённое — нет.                          */
+  var answers = { area: 45 };
+  var at = 0;                 /* текущий шаг, 0..STEPS.length (последний — результат) */
+  var last = STEPS.length;    /* индекс экрана результата */
+
+  var rail   = document.getElementById("rail");
+  var pane   = document.getElementById("pane");
+  var body   = document.getElementById("body");
+  var priceE = document.getElementById("price");
+  var backB  = document.getElementById("back");
+  var nextB  = document.getElementById("next");
+  var ofE    = document.getElementById("step-of");
+  var leftE  = document.getElementById("step-left");
+
+  /* ── деньги по-русски: 1 240 000, пробелы неразрывные ────── */
+  function money(n) {
+    return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+
+  /* Вилка одной строкой: знак рубля ставим только в конце. С двумя
+     знаками строка не влезала и рвалась после тире — висящее «—»
+     в конце строки читается как обрыв, а не как диапазон. */
+  function range(v) {
+    return money(v[0]) + " — " + money(v[1]) + " ₽";
+  }
+
+  /* ── расчёт вилки ──────────────────────────────────────────
+     Считаем от того, что уже отвечено: неотвеченное берём по
+     минимуму (для нижней границы) и по максимуму (для верхней),
+     поэтому вилка сужается с каждым шагом, а не появляется в
+     конце. Это и есть обещание «видно, что двигает цену».     */
+  function calc() {
+    if (!answers.type) return null;
+
+    var area = answers.area || 45;
+    var base = PRICE.base[answers.type];
+    var comm = answers.comm ? PRICE.comm[answers.comm] : [0, 2900];
+    var bath = answers.bath ? PRICE.bath[answers.bath] : [0, 240000];
+    var term = answers.term ? [PRICE.term[answers.term], PRICE.term[answers.term]] : [0.95, 1.18];
+    var fin  = answers.fin  ? [PRICE.fin[answers.fin],  PRICE.fin[answers.fin]]   : [0.88, 1.35];
+
+    var lo = (base[0] + comm[0]) * area * term[0] * fin[0] + bath[0];
+    var hi = (base[1] + comm[1]) * area * term[1] * fin[1] + bath[1];
+
+    /* округляем до тысяч: точность до рубля здесь была бы враньём */
+    return [Math.round(lo / 1000) * 1000, Math.round(hi / 1000) * 1000];
+  }
+
+  /* ── цена в подвале, с добеганием цифр ─────────────────────
+     Прыжок числа читается как «пересчитали заново», плавный
+     переход — как «поправили из-за вашего ответа». Второе
+     ближе к правде.                                           */
+  var shown = null, raf = null;
+  function paintPrice(live) {
+    var v = calc();
+    if (!v) {
+      priceE.classList.add("idle");
+      priceE.textContent = "ответьте на первый вопрос";
+      shown = null;
+      return;
+    }
+    priceE.classList.remove("idle");
+
+    /* live — это движение ползунка площади: там человек и так тянет
+       цифру рукой, добегание в этот момент только отстаёт от пальца */
+    if (slow || live || !shown) {
+      if (raf) { cancelAnimationFrame(raf); raf = null; }
+      shown = v.slice();
+      priceE.textContent = range(v);
+      return;
+    }
+
+    var from = shown.slice(), to = v.slice(), t0 = performance.now(), dur = 420;
+    if (raf) cancelAnimationFrame(raf);
+    (function tick(now) {
+      var p = Math.min(1, (now - t0) / dur);
+      var e = 1 - Math.pow(1 - p, 3);
+      var a = from[0] + (to[0] - from[0]) * e;
+      var b = from[1] + (to[1] - from[1]) * e;
+      /* shown обновляем на каждом кадре, а не в конце: иначе
+         следующий пересчёт стартует со старой цифры и число
+         прыгает назад, прежде чем поехать вперёд */
+      shown = [a, b];
+      priceE.textContent = range(shown);
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else { shown = to; raf = null; }
+    })(performance.now());
+  }
+
+  /* ── рельс прогресса ───────────────────────────────────────
+     Пройденные шаги кликабельны: вернуться к третьему вопросу
+     можно сразу, а не пятью нажатиями «назад».                */
+  function paintRail() {
+    rail.innerHTML = "";
+    for (var i = 0; i <= last; i++) {
+      (function (i) {
+        var li = document.createElement("li");
+        var b  = document.createElement("button");
+        b.type = "button";
+        b.innerHTML = "<i></i>";
+        var done = i < at || (i < last && answered(i));
+        if (done) b.setAttribute("data-done", "1");
+        if (i === at) b.setAttribute("data-now", "1");
+        b.setAttribute("aria-label", "Шаг " + (i + 1) + (i === at ? ", текущий" : ""));
+        if (done && i !== at) {
+          b.addEventListener("click", function () { go(i); });
+        } else {
+          b.tabIndex = -1;
+        }
+        li.appendChild(b);
+        rail.appendChild(li);
+      })(i);
+    }
+  }
+
+  function answered(i) {
+    var s = STEPS[i];
+    return s ? answers[s.id] !== undefined : false;
+  }
+
+  /* ── отрисовка шага ────────────────────────────────────────
+     Высоту панели анимируем вручную: без этого карточка
+     дёргается на каждом шаге, потому что у вопросов разная
+     длина. Событие редкое (раз в шаг), поэтому дешевле так,
+     чем городить фиксированную высоту под самый длинный.      */
+  function go(i, dir) {
+    if (i === at && dir === undefined) return;
+    dir = dir || (i > at ? "next" : "prev");
+
+    var h0 = body.offsetHeight;
+    at = i;
+    pane.className = "quiz-pane";
+    pane.innerHTML = "";
+    (at === last ? drawResult : drawStep)();
+
+    if (!slow) {
+      var h1 = pane.offsetHeight;
+      body.style.height = h0 + "px";
+      /* два кадра: первый фиксирует старую высоту, второй запускает переход */
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          body.style.height = h1 + "px";
+          pane.classList.add(dir);
+        });
+      });
+      var done = function (e) {
+        if (e.propertyName !== "height") return;
+        body.style.height = "";
+        body.removeEventListener("transitionend", done);
+      };
+      body.addEventListener("transitionend", done);
+    }
+
+    paintRail();
+    paintMeta();
+    paintNav();
+    keepInView();
+  }
+
+  /* На телефоне карточка занимает почти весь экран, и следующий
+     вопрос легко оказывается под шапкой — человек нажал «Далее»
+     и смотрит в середину чужого вопроса. Подтягиваем верх карточки
+     обратно, но только если он действительно уехал: дёргать
+     страницу без нужды хуже, чем не дёргать вовсе. */
+  function keepInView() {
+    var quiz = document.getElementById("quiz");
+    var head = document.querySelector(".demo-bar").offsetHeight +
+               document.querySelector(".nav").offsetHeight;
+    var top = quiz.getBoundingClientRect().top;
+    if (top >= head - 4) return;
+    window.scrollTo({
+      top: window.pageYOffset + top - head - 12,
+      behavior: slow ? "auto" : "smooth"
+    });
+  }
+
+  function paintMeta() {
+    if (at === last) {
+      ofE.textContent = "Готово";
+      leftE.textContent = "";
+      return;
+    }
+    ofE.textContent = "Шаг " + (at + 1) + " из " + last;
+    var left = last - at - 1;
+    leftE.textContent = left === 0 ? "последний" : "осталось " + left;
+  }
+
+  function paintNav() {
+    backB.disabled = at === 0;
+    nextB.style.display = at === last ? "none" : "";
+    nextB.disabled = at !== last && !answered(at);
+    /* на экране результата вилка уже написана крупно — повторять
+       её же в подвале незачем, а «Назад» там всё ещё нужна */
+    document.querySelector(".price-live").style.visibility =
+      at === last ? "hidden" : "";
+  }
+
+  /* ── экран вопроса ─────────────────────────────────────── */
+  function drawStep() {
+    var s = STEPS[at];
+
+    var h = document.createElement("h2");
+    h.className = "q-title";
+    h.textContent = s.q;
+    pane.appendChild(h);
+
+    var hint = document.createElement("p");
+    hint.className = "q-hint";
+    hint.textContent = s.hint;
+    pane.appendChild(hint);
+
+    if (s.kind === "range") { drawRange(s); return; }
+
+    /* Варианты — это радиогруппа, а не набор кнопок: клавиши
+       вверх-вниз должны переключать ответ, как в родной форме */
+    var group = document.createElement("div");
+    group.className = "opts";
+    group.setAttribute("role", "radiogroup");
+    group.setAttribute("aria-label", s.q);
+
+    s.opts.forEach(function (o, idx) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "opt";
+      b.setAttribute("role", "radio");
+      var on = answers[s.id] === o.v;
+      b.setAttribute("aria-checked", on ? "true" : "false");
+      b.tabIndex = on || (answers[s.id] === undefined && idx === 0) ? 0 : -1;
+      b.innerHTML =
+        '<span class="opt-tick" aria-hidden="true">' +
+          '<svg width="10" height="8" viewBox="0 0 10 8" fill="none">' +
+            '<path d="M1 4.2L3.5 6.7 9 1.2" stroke="#141619" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '</svg>' +
+        '</span>' +
+        '<span><span class="opt-t"></span><span class="opt-d"></span></span>';
+      b.querySelector(".opt-t").textContent = o.t;
+      b.querySelector(".opt-d").textContent = o.d;
+
+      b.addEventListener("click", function () { pick(s, o.v); });
+      b.addEventListener("keydown", function (e) {
+        var d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1
+              : e.key === "ArrowUp"   || e.key === "ArrowLeft"  ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        var all = [].slice.call(group.querySelectorAll(".opt"));
+        var n = all[(all.indexOf(b) + d + all.length) % all.length];
+        n.focus();
+        pick(s, s.opts[all.indexOf(n)].v, true);
+      });
+
+      group.appendChild(b);
+    });
+
+    pane.appendChild(group);
+  }
+
+  /* Выбор варианта сам листает дальше: лишнее нажатие «Далее»
+     на каждом из шести шагов — это шесть лишних касаний. При
+     переборе с клавиатуры не листаем, иначе не выбрать нижний. */
+  function pick(s, v, hold) {
+    answers[s.id] = v;
+    [].slice.call(pane.querySelectorAll(".opt")).forEach(function (el, i) {
+      var on = s.opts[i].v === v;
+      el.setAttribute("aria-checked", on ? "true" : "false");
+      el.tabIndex = on ? 0 : -1;
+    });
+    paintPrice();
+    paintNav();
+    paintRail();
+    if (hold) return;
+    window.setTimeout(function () { if (at < last) go(at + 1, "next"); }, slow ? 0 : 240);
+  }
+
+  /* ── шаг с площадью ────────────────────────────────────── */
+  function drawRange(s) {
+    var wrap = document.createElement("div");
+    wrap.innerHTML =
+      '<div class="area-row">' +
+        '<input class="area-num" id="area-num" type="number" inputmode="numeric" ' +
+               'min="' + s.min + '" max="' + s.max + '" step="' + s.step + '" ' +
+               'aria-label="Площадь квартиры в квадратных метрах">' +
+        '<input type="range" id="area-rng" min="' + s.min + '" max="' + s.max + '" ' +
+               'step="' + s.step + '" aria-label="Площадь квартиры, ползунок">' +
+      '</div>' +
+      '<div class="area-marks"><span>' + s.min + ' ' + s.unit + '</span><span>' + s.max + '+ ' + s.unit + '</span></div>';
+    pane.appendChild(wrap);
+
+    var num = wrap.querySelector("#area-num");
+    var rng = wrap.querySelector("#area-rng");
+    var val = answers.area || s.def;
+    num.value = val; rng.value = val;
+
+    function set(v, from, live) {
+      v = Math.max(s.min, Math.min(s.max, parseInt(v, 10) || s.def));
+      answers.area = v;
+      if (from !== "num") num.value = v;
+      if (from !== "rng") rng.value = v;
+      paintPrice(live);
+      paintNav();
+    }
+    rng.addEventListener("input", function () { set(rng.value, "rng", true); });
+    num.addEventListener("input", function () { if (num.value !== "") set(num.value, "num", true); });
+    num.addEventListener("blur",  function () { set(num.value); });
+  }
+
+  /* ── экран результата ──────────────────────────────────────
+     Контакты спрашиваем последними, когда расчёт уже на экране:
+     до этого форма только мешала бы.                          */
+  function drawResult() {
+    var v = calc() || [0, 0];
+    var s = STEPS;
+
+    function label(id, val) {
+      var step = s.filter(function (x) { return x.id === id; })[0];
+      if (!step || !step.opts) return "";
+      var o = step.opts.filter(function (x) { return x.v === val; })[0];
+      return o ? o.t : "";
+    }
+
+    var box = document.createElement("div");
+    box.innerHTML =
+      '<p class="q-hint" style="margin-bottom:6px">Предварительная стоимость работ и черновых материалов</p>' +
+      '<div class="res-num">' + range(v) + '</div>' +
+      '<p class="res-sub">Замер уточнит цифру. По прошлым объектам расхождение — в пределах 8&nbsp;%.</p>' +
+      '<ul class="res-list">' +
+        row("Тип ремонта", label("type", answers.type)) +
+        row("Площадь", (answers.area || 45) + " м²") +
+        row("Санузел", label("bath", answers.bath)) +
+        row("Электрика и вода", label("comm", answers.comm)) +
+        row("Сроки", label("term", answers.term)) +
+        row("Отделка", label("fin", answers.fin)) +
+      '</ul>' +
+      '<form id="lead" novalidate>' +
+        '<div class="fields">' +
+          '<div class="field">' +
+            '<label for="f-name">Как к вам обращаться</label>' +
+            '<input id="f-name" name="name" type="text" autocomplete="name" required>' +
+            '<p class="err">Напишите имя — иначе непонятно, как начать разговор.</p>' +
+          '</div>' +
+          '<div class="field">' +
+            '<label for="f-tel">Телефон</label>' +
+            '<input id="f-tel" name="tel" type="tel" inputmode="tel" autocomplete="tel" required>' +
+            '<p class="err">Нужен номер из десяти цифр.</p>' +
+          '</div>' +
+        '</div>' +
+        '<button class="btn" type="submit" style="width:100%">Прислать смету построчно</button>' +
+        '<p class="fine" id="fine">Расчёт и ответы уходят менеджеру одним письмом — перезванивать за уточнениями не придётся.</p>' +
+      '</form>';
+    pane.appendChild(box);
+
+    function row(k, val) {
+      if (!val) return "";
+      return '<li><span class="k">' + k + '</span><span class="v">' + val + '</span></li>';
+    }
+
+    var form = box.querySelector("#lead");
+    var fine = box.querySelector("#fine");
+    var name = box.querySelector("#f-name");
+    var tel  = box.querySelector("#f-tel");
+
+    /* проверяем на уходе из поля, а не только по кнопке: узнать
+       об ошибке через секунду лучше, чем в конце                */
+    function okName() { return name.value.trim().length >= 2; }
+    function okTel()  { return (tel.value.match(/\d/g) || []).length >= 10; }
+    function mark(el, ok) { el.setAttribute("aria-invalid", ok ? "false" : "true"); }
+
+    name.addEventListener("blur", function () { if (name.value) mark(name, okName()); });
+    tel.addEventListener("blur",  function () { if (tel.value)  mark(tel,  okTel());  });
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      mark(name, okName());
+      mark(tel, okTel());
+      if (!okName()) { name.focus(); return; }
+      if (!okTel())  { tel.focus();  return; }
+
+      /* Отправлять данные несуществующей компании некуда, а
+         собирать телефоны на демо-странице — тем более незачем.
+         Говорим об этом прямо, а не молчаливым «спасибо».      */
+      fine.textContent = name.value.trim() +
+        ", это демонстрация вёрстки — заявка никуда не ушла. На рабочем сайте здесь уходит письмо и сообщение в Telegram.";
+      fine.style.color = "var(--acc-lit)";
+    });
+  }
+
+  /* ── навигация ─────────────────────────────────────────── */
+  backB.addEventListener("click", function () { if (at > 0) go(at - 1, "prev"); });
+  nextB.addEventListener("click", function () { if (answered(at)) go(at + 1, "next"); });
+
+  go(0, "next");
+  paintPrice();
+
+  /* ── шапка и полоса прочтения ──────────────────────────── */
+  var nav = document.getElementById("nav");
+  var prog = document.getElementById("prog");
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      var y = window.pageYOffset;
+      nav.classList.toggle("stuck", y > 20);
+      var max = document.documentElement.scrollHeight - window.innerHeight;
+      prog.style.width = (max > 0 ? (y / max) * 100 : 0) + "%";
+      ticking = false;
+    });
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  /* ── появление блоков ──────────────────────────────────── */
+  var rises = [].slice.call(document.querySelectorAll(".rise"));
+  if (slow || !("IntersectionObserver" in window)) {
+    rises.forEach(function (el) { el.classList.add("in"); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        en.target.classList.add("in");
+        io.unobserve(en.target);
+      });
+    }, { rootMargin: "0px 0px -12% 0px" });
+    rises.forEach(function (el, i) {
+      el.style.transitionDelay = (i % 3) * 0.07 + "s";
+      io.observe(el);
+    });
+  }
+})();
+</script>
+</body>
+</html>
