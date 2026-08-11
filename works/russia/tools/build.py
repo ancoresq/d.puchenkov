@@ -102,8 +102,11 @@ for code, name, short, typ, cap, fd, disputed in REGIONS:
         cx, cy = FIT.px(*albers(ll[0], ll[1]))
 
     regions_js.append({
+        # Ключ признака спорного статуса — 'dis', а не 'd'. Короткое 'd'
+        # у всех остальных слоёв означает строку SVG-пути, и общая
+        # проверка вида feat.d срабатывала на каждой реке и горе разом.
         'c': code, 'n': name, 's': short, 't': typ, 'cap': cap, 'fd': fd,
-        'd': disputed, 'a': round(area),
+        'dis': disputed, 'a': round(area),
         'lx': round(lx, 1), 'ly': round(ly, 1),
         'cx': round(cx, 1), 'cy': round(cy, 1),
         'p': path,
