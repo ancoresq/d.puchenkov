@@ -80,7 +80,7 @@ places = load('ne_10m_populated_places.geojson')
 place_xy = {}
 for f in places['features']:
     q = f['properties']
-    if q.get('ADM0_A3') not in ('RUS', 'UKR'):
+    if q.get('ADM0_A3') != 'RUS':
         continue
     nm = (q.get('NAME_RU') or '').strip()
     if nm and nm not in place_xy:
@@ -102,10 +102,14 @@ for code, name, short, typ, cap, fd, disputed in REGIONS:
         cx, cy = FIT.px(*albers(ll[0], ll[1]))
 
     regions_js.append({
-        # Ключ признака спорного статуса — 'dis', а не 'd'. Короткое 'd'
+        # adm1_code в выдачу не кладём: странице он не нужен, это
+        # служебный ключ связки со справочником, который живёт только
+        # здесь, в сборке.
+        #
+        # Ключ признака штриховки — 'dis', а не 'd'. Короткое 'd'
         # у всех остальных слоёв означает строку SVG-пути, и общая
         # проверка вида feat.d срабатывала на каждой реке и горе разом.
-        'c': code, 'n': name, 's': short, 't': typ, 'cap': cap, 'fd': fd,
+        'n': name, 's': short, 't': typ, 'cap': cap, 'fd': fd,
         'dis': disputed, 'a': round(area),
         'lx': round(lx, 1), 'ly': round(ly, 1),
         'cx': round(cx, 1), 'cy': round(cy, 1),
