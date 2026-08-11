@@ -48,6 +48,29 @@
   }
   .demo-note b { color: #eceae4; }
 
+  /* Две двери в один и тот же инструмент: полный редактор и
+     упрощённый режим для тех, кому нужно только подставить текст. */
+  .tools { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 12px; margin: 0 0 56px; }
+  @media (max-width: 640px) { .tools { grid-template-columns: 1fr; } }
+  .tools a {
+    display: block; padding: 16px 20px; border-radius: 13px;
+    border: 1px solid transparent; transition: transform 0.25s ease, border-color 0.25s ease;
+  }
+  .tools a:hover { transform: translateY(-2px); }
+  .tools a span { display: block; margin-top: 5px; font-weight: 400; font-size: 12.5px; line-height: 1.45; }
+  .tool-primary {
+    background: #ea580c; color: #141619; font-weight: 800; font-size: 15.5px;
+    box-shadow: 0 20px 40px -18px rgba(234, 88, 12, 0.55);
+  }
+  /* Подпись на оранжевом — сплошной тёмный, 5.1:1. Прозрачность
+     здесь роняла контраст до 3.6:1, ниже нормы для мелкого кегля. */
+  .tool-primary span { color: #141619; }
+  .tool-second {
+    background: #101214; border-color: #1e2225; color: #eceae4; font-weight: 700; font-size: 15px;
+  }
+  .tool-second:hover { border-color: #5b93bd; }
+  .tool-second span { color: #9ea1a3; }
+
   .gallery { display: flex; flex-direction: column; gap: 64px; }
   .item { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(28px, 4vw, 56px); align-items: center; }
   .item:nth-child(even) { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); }
@@ -92,9 +115,16 @@
 
   <p class="demo-note"><b>Демонстрационный комплект.</b> Товар вымышленный, кружка — рендер, не фотосъёмка реального изделия.</p>
 
-  <a href="generator.html" style="display:inline-flex;align-items:center;gap:10px;margin:0 0 56px;padding:14px 22px;border-radius:12px;background:#ea580c;color:#141619;font-weight:800;font-size:15px;box-shadow:0 20px 40px -18px rgba(234,88,12,0.55);">
-    Собрать такую же карточку из своего фото →
-  </a>
+  <div class="tools">
+    <a class="tool-primary" href="studio.html">
+      Собрать карточку из своего фото →
+      <span>Полный редактор: слои, обтравка, градиентные фоны, типографика</span>
+    </a>
+    <a class="tool-second" href="generator.html">
+      Быстрый режим
+      <span>Три готовых макета, только текст и фото</span>
+    </a>
+  </div>
 
   <div class="gallery">
     <article class="item">
