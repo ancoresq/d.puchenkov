@@ -88,16 +88,6 @@ function put(parent, d, cls, feat) {
   return el.node;
 }
 
-/* Штриховка для территорий со спорным статусом. */
-(function defs() {
-  var d = document.createElementNS(SVGNS, 'defs');
-  d.innerHTML =
-    '<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse"' +
-    ' patternTransform="rotate(45)">' +
-    '<line x1="0" y1="0" x2="0" y2="7"/></pattern>';
-  canvas.insertBefore(d, canvas.firstChild);
-})();
-
 /* ─── Ярусы подписей ───────────────────────────────────────────────
    Подписей на карте больше, чем помещается: 89 субъектов, 62 реки,
    246 озёр. Показывать всё сразу — каша. Поэтому каждая подпись
@@ -304,12 +294,6 @@ pol.build = function () {
     o.fdName = (FD[o.fd] || ['', 1])[0] + ' федеральный округ';
     o.node = put(this.shapes, o.p, 'reg fd' + (FD[o.fd] || ['', 1])[1], o);
   }
-  /* Штриховка спорных территорий идёт отдельным слоем поверх заливки:
-     так она не мешает подсветке при наведении. */
-  for (i = 0; i < list.length; i++) {
-    if (list[i].dis) put(this.marks, list[i].p, 'disp');
-  }
-
   for (i = 0; i < list.length; i++) {
     o = list[i];
     var t = tierOf(o.a, 30000, 9000, 2200);
@@ -748,8 +732,6 @@ var LEGENDS = {
       'Города федерального значения'));
     box.appendChild(keyRow('dot', 'background:var(--m-halo);border-color:var(--m-label)',
       'Столицы субъектов'));
-    box.appendChild(keyRow('', 'background-image:repeating-linear-gradient(45deg,' +
-      'var(--text-dim) 0 2px,transparent 2px 5px)', 'Спорный статус'));
     box.appendChild(note('Подписи субъектов и столиц появляются по мере приближения: на общем виде показаны только крупнейшие.'));
   }
 };
