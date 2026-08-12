@@ -87,7 +87,7 @@ for f in places['features']:
         place_xy[nm] = tuple(f['geometry']['coordinates'][:2])
 
 regions_js, no_cap = [], []
-for code, name, short, typ, cap, fd, disputed in REGIONS:
+for code, name, short, typ, cap, fd in REGIONS:
     feat = by_code[code]
     path, area, big = rings_to_path(feat['geometry'], 0.7, 3.0)
 
@@ -105,12 +105,8 @@ for code, name, short, typ, cap, fd, disputed in REGIONS:
         # adm1_code в выдачу не кладём: странице он не нужен, это
         # служебный ключ связки со справочником, который живёт только
         # здесь, в сборке.
-        #
-        # Ключ признака штриховки — 'dis', а не 'd'. Короткое 'd'
-        # у всех остальных слоёв означает строку SVG-пути, и общая
-        # проверка вида feat.d срабатывала на каждой реке и горе разом.
         'n': name, 's': short, 't': typ, 'cap': cap, 'fd': fd,
-        'dis': disputed, 'a': round(area),
+        'a': round(area),
         'lx': round(lx, 1), 'ly': round(ly, 1),
         'cx': round(cx, 1), 'cy': round(cy, 1),
         'p': path,

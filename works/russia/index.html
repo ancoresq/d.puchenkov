@@ -427,10 +427,6 @@ html[data-theme="light"] .ico .moon { display: none; }
 .stage .grat    { fill: none; stroke: var(--m-grat); stroke-width: 1; }
 .stage .coast   { fill: none; stroke: var(--m-coast); stroke-width: 1.4; }
 
-/* Штриховка спорных территорий. Цвет задаём правилом, а не атрибутом:
-   он должен меняться вместе с темой. */
-.stage #hatch line { stroke: var(--m-halo); stroke-width: 2.4; opacity: 0.5; }
-
 .stage .reg {
   stroke: var(--bg-deep);
   stroke-width: 1;
@@ -455,11 +451,6 @@ html[data-theme="light"] .ico .moon { display: none; }
 .stage .fd6 { fill: var(--fd-6); }
 .stage .fd7 { fill: var(--fd-7); }
 .stage .fd8 { fill: var(--fd-8); }
-
-/* Обводку гасим явно: Raphael вешает на каждый путь stroke="#000"
-   атрибутом, и без этой строки вокруг спорных территорий появлялся
-   жирный чёрный контур, который в тёмной теме просто исчезал. */
-.stage .disp { fill: url(#hatch); stroke: none; pointer-events: none; }
 
 /* Точки столиц. Это не круги, а путь нулевой длины с круглым концом
    штриха: при vector-effect:non-scaling-stroke толщина штриха считается
