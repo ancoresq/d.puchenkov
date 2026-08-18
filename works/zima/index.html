@@ -1,0 +1,4599 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Одиннадцатая зима — интерактивная новелла | D.PUCHENKOV</title>
+
+<!-- Демо-проект из портфолио: инди-новелла с процедурной графикой.
+     Ни одной внешней библиотеки, ни одного сетевого запроса — вся
+     графика рисуется на canvas по сиду, звук синтезируется в
+     WebAudio. Страница закрыта от индексации: это работа-витрина,
+     а не самостоятельный продукт. -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Интерактивная новелла в постапокалиптическом сеттинге: процедурные арты на canvas, ветвление сюжета, стелс-сцены и три финала. Демо-работа D.PUCHENKOV.">
+<meta name="theme-color" content="#0d100e">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d100e'/%3E%3Cpath d='M14 46c6-4 10-10 12-18 1-5 4-8 6-8s5 3 6 8c2 8 6 14 12 18z' fill='%23c9a227'/%3E%3C/svg%3E">
+
+<style>
+  /* ═══════════════════════════════════════════════════════════════
+     ОДИННАДЦАТАЯ ЗИМА · интерактивная новелла
+     ───────────────────────────────────────────────────────────────
+     Один файл. Графика — процедурный canvas (сид → город, лес,
+     руины), интерфейс — обычный DOM поверх него. Палитра держится
+     на трёх нотах: пепел, ржавчина и болотная зелень проросшего
+     бетона. Всё остальное — свет.
+     ═══════════════════════════════════════════════════════════════ */
+
+  :root {
+    /* пепел */
+    --ash-000: #070908;
+    --ash-050: #0d100e;
+    --ash-100: #141815;
+    --ash-200: #1d221e;
+    --ash-300: #2a302b;
+    --ash-400: #3b423c;
+    --ash-500: #5a635b;
+    --fog:     #9aa39a;
+    --bone:    #d8d3c6;
+    --paper:   #ece6d8;
+
+    /* свет */
+    --amber:      #c9a227;
+    --amber-soft: #e0be52;
+    --amber-dim:  rgba(201, 162, 39, .16);
+    --rust:       #a4551f;
+    --moss:       #5b7a4a;
+    --blood:      #8e2b22;
+    --ice:        #7fa6ad;
+
+    --serif: "Georgia", "Iowan Old Style", "Times New Roman", serif;
+    --face:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono:  ui-monospace, "SF Mono", "Cascadia Mono", Consolas, Menlo, monospace;
+
+    --ease: cubic-bezier(.16, 1, .3, 1);
+    --gut: clamp(14px, 3.2vw, 40px);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--ash-000);
+    color: var(--bone);
+    font-family: var(--face);
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+
+  ::selection { background: var(--amber); color: var(--ash-000); }
+
+  /* ── сцена ─────────────────────────────────────────────────── */
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: #000;
+  }
+
+  #scene {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* лёгкий «плёночный» сдвиг цвета — как будто кадр отсканирован */
+    filter: saturate(.92) contrast(1.04);
+  }
+
+  /* Кинематографические поля. На узких экранах уезжают в ноль —
+     на телефоне и так тесно. */
+  #stage::before, #stage::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0;
+    height: clamp(0px, 3.4vh, 46px);
+    background: #000;
+    z-index: 6;
+    pointer-events: none;
+    transition: height .8s var(--ease);
+  }
+  #stage::before { top: 0; }
+  #stage::after  { bottom: 0; }
+  body.is-reading #stage::after { height: 0; }
+
+  /* Вспышка перехода между сценами */
+  #wipe {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 40;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .5s linear;
+  }
+  #wipe.on { opacity: 1; }
+
+  /* ── общий слой интерфейса ─────────────────────────────────── */
+
+  #ui {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0 var(--gut) calc(clamp(0px, 3.4vh, 46px) + var(--gut));
+    pointer-events: none;
+  }
+  #ui > * { pointer-events: auto; }
+
+  /* ── верхняя панель ────────────────────────────────────────── */
+
+  #topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: calc(clamp(0px, 3.4vh, 46px) + 10px) var(--gut) 10px;
+    background: linear-gradient(#000c 0%, #0009 40%, transparent 100%);
+    pointer-events: none;
+    transition: opacity .4s var(--ease);
+  }
+  #topbar > * { pointer-events: auto; }
+  body.hide-ui #topbar,
+  body:not(.is-reading) #topbar { opacity: 0; pointer-events: none; }
+
+  #chapter {
+    font: 500 11px/1.3 var(--mono);
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--fog);
+    text-shadow: 0 1px 6px #000;
+  }
+  #chapter b {
+    display: block;
+    color: var(--bone);
+    font: 400 13px/1.4 var(--serif);
+    letter-spacing: .04em;
+    text-transform: none;
+  }
+
+  #stats {
+    display: flex;
+    gap: 14px;
+    margin-left: auto;
+    align-items: center;
+  }
+  .stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font: 600 12px/1 var(--mono);
+    color: var(--bone);
+    text-shadow: 0 1px 4px #000;
+    letter-spacing: .04em;
+  }
+  .stat svg { width: 15px; height: 15px; opacity: .8; flex: none; }
+  .stat.pulse { animation: statPulse .5s var(--ease); }
+  @keyframes statPulse {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.28); color: var(--amber-soft); }
+    100% { transform: scale(1); }
+  }
+  .stat.low { color: var(--rust); }
+
+  .iconbtn {
+    width: 34px; height: 34px;
+    display: grid; place-items: center;
+    border: 1px solid #ffffff1f;
+    border-radius: 3px;
+    background: #0b0e0cb0;
+    color: var(--fog);
+    cursor: pointer;
+    transition: color .2s, border-color .2s, background .2s;
+    backdrop-filter: blur(3px);
+  }
+  .iconbtn:hover, .iconbtn:focus-visible {
+    color: var(--amber-soft);
+    border-color: var(--amber);
+    background: #14180f;
+    outline: none;
+  }
+  .iconbtn svg { width: 17px; height: 17px; }
+
+  /* ── диалоговое окно ───────────────────────────────────────── */
+
+  #box {
+    margin: 0;
+    width: 100%;
+    max-width: 780px;
+    padding: 20px 24px 22px;
+    background: linear-gradient(180deg, #0b0e0cf2, #070908fa);
+    border: 1px solid #ffffff14;
+    border-left: 2px solid var(--amber);
+    border-radius: 2px;
+    box-shadow: 0 24px 60px -20px #000, 0 0 0 1px #0006;
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity .45s var(--ease), transform .45s var(--ease);
+  }
+  #box.on { opacity: 1; transform: none; }
+  #box.narration { border-left-color: var(--ash-500); }
+
+  #speaker {
+    font: 600 11px/1 var(--mono);
+    letter-spacing: .24em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 11px;
+    display: none;
+  }
+  #box.has-speaker #speaker { display: block; }
+  #speaker.c-asya  { color: var(--ice); }
+  #speaker.c-egor  { color: var(--amber); }
+  #speaker.c-marta { color: var(--moss); }
+  #speaker.c-enemy { color: var(--blood); }
+
+  #text {
+    font: 400 clamp(15px, 1.55vw, 18px)/1.72 var(--serif);
+    color: var(--paper);
+    margin: 0;
+    min-height: 3.44em;
+    letter-spacing: .005em;
+  }
+  #box.narration #text { color: #c3c0b4; font-style: italic; }
+  #text .em { color: var(--amber-soft); font-style: normal; }
+
+  #next {
+    display: none;
+    margin-top: 12px;
+    text-align: right;
+    color: var(--amber);
+    font: 400 12px/1 var(--mono);
+    letter-spacing: .1em;
+    animation: blink 1.6s infinite;
+  }
+  #box.done #next { display: block; }
+  @keyframes blink { 0%, 100% { opacity: .25 } 50% { opacity: 1 } }
+
+  /* ── выбор ─────────────────────────────────────────────────── */
+
+  #choices {
+    margin: 0 0 10px;
+    width: 100%;
+    max-width: 780px;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #choices.on { display: flex; }
+
+  .choice {
+    position: relative;
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 13px 16px 13px 40px;
+    background: #0b0e0ce8;
+    border: 1px solid #ffffff1a;
+    border-radius: 2px;
+    color: var(--paper);
+    font: 400 clamp(14px, 1.4vw, 16px)/1.5 var(--serif);
+    cursor: pointer;
+    transition: border-color .2s, background .2s, transform .2s var(--ease), color .2s;
+    backdrop-filter: blur(5px);
+    animation: choiceIn .4s var(--ease) both;
+  }
+  .choice:nth-child(1) { animation-delay: .00s }
+  .choice:nth-child(2) { animation-delay: .06s }
+  .choice:nth-child(3) { animation-delay: .12s }
+  .choice:nth-child(4) { animation-delay: .18s }
+  @keyframes choiceIn { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+
+  .choice::before {
+    content: attr(data-key);
+    position: absolute;
+    left: 14px; top: 50%;
+    transform: translateY(-50%);
+    font: 600 11px/1 var(--mono);
+    color: var(--ash-500);
+    transition: color .2s;
+  }
+  .choice:hover, .choice:focus-visible {
+    border-color: var(--amber);
+    background: #16190f;
+    transform: translateX(4px);
+    outline: none;
+  }
+  .choice:hover::before, .choice:focus-visible::before { color: var(--amber); }
+
+  .choice .tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    font: 600 9.5px/1.35 var(--mono);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    vertical-align: 2px;
+    opacity: .85;
+  }
+  .tag.risk  { color: var(--rust); }
+  .tag.cost  { color: var(--amber); }
+  .tag.trust { color: var(--ice); }
+  .choice.locked {
+    opacity: .38;
+    cursor: not-allowed;
+    filter: grayscale(1);
+  }
+  .choice.locked:hover { transform: none; border-color: #ffffff1a; background: #0b0e0ce8; }
+
+  /* ── горячие точки на арте ─────────────────────────────────── */
+
+  #hotspots { position: fixed; inset: 0; z-index: 11; pointer-events: none; }
+  .hot {
+    position: absolute;
+    width: 42px; height: 42px;
+    margin: -21px 0 0 -21px;
+    border-radius: 50%;
+    border: 1px solid #ffffff30;
+    background: radial-gradient(circle, #ffffff14, transparent 68%);
+    cursor: pointer;
+    pointer-events: auto;
+    display: grid; place-items: center;
+    transition: transform .25s var(--ease), border-color .25s, background .25s;
+  }
+  .hot::after {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 12px 3px var(--amber-dim);
+    animation: hotPulse 2.4s var(--ease) infinite;
+  }
+  @keyframes hotPulse {
+    0%, 100% { transform: scale(.7); opacity: .55 }
+    50%      { transform: scale(1.15); opacity: 1 }
+  }
+  .hot:hover { transform: scale(1.18); border-color: var(--amber); background: radial-gradient(circle, #c9a2271f, transparent 70%); }
+  .hot.done { opacity: .25; pointer-events: none; }
+  .hot.done::after { animation: none; background: var(--ash-500); box-shadow: none; }
+  .hot .label {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font: 500 10px/1 var(--mono);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--bone);
+    background: #000000b8;
+    padding: 4px 7px;
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity .2s;
+    pointer-events: none;
+  }
+  .hot:hover .label { opacity: 1; }
+
+  #searchbar {
+    position: fixed;
+    left: 50%;
+    top: calc(clamp(0px, 3.4vh, 46px) + 62px);
+    transform: translateX(-50%);
+    z-index: 12;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 14px;
+    background: #0b0e0cd0;
+    border: 1px solid #ffffff1a;
+    border-radius: 2px;
+    font: 500 11px/1 var(--mono);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--fog);
+    backdrop-filter: blur(4px);
+  }
+  #searchbar.on { display: flex; animation: choiceIn .4s var(--ease) both; }
+  #searchbar b { color: var(--amber); }
+  #sbGo {
+    margin-left: 4px;
+    padding: 5px 10px;
+    background: transparent;
+    border: 1px solid var(--amber);
+    border-radius: 2px;
+    color: var(--amber-soft);
+    font: 500 10.5px/1 var(--mono);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background .2s, color .2s;
+  }
+  #sbGo:hover, #sbGo:focus-visible { background: var(--amber); color: #0b0e0c; outline: none; }
+
+  /* ── тосты ─────────────────────────────────────────────────── */
+
+  #toasts {
+    position: fixed;
+    left: 50%;
+    bottom: calc(clamp(0px, 3.4vh, 46px) + 16px);
+    transform: translateX(-50%);
+    z-index: 30;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+  }
+  .toast {
+    padding: 8px 14px;
+    background: #0b0e0ce8;
+    border: 1px solid #ffffff1f;
+    border-left: 2px solid var(--amber);
+    border-radius: 2px;
+    font: 500 12px/1.3 var(--mono);
+    letter-spacing: .08em;
+    color: var(--paper);
+    white-space: nowrap;
+    animation: toastIn .35s var(--ease) both, toastOut .5s var(--ease) 2.4s both;
+  }
+  .toast.bad  { border-left-color: var(--blood); }
+  .toast.good { border-left-color: var(--moss); }
+  @keyframes toastIn  { from { opacity: 0; transform: translateY(12px) } }
+  @keyframes toastOut { to { opacity: 0; transform: translateY(-8px) } }
+
+  /* ── титульный экран ───────────────────────────────────────── */
+
+  #title {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    padding: var(--gut);
+    background: radial-gradient(ellipse at 50% 62%, #0b0e0c66, #05060590 55%, #000 100%);
+    transition: opacity .8s var(--ease), visibility .8s;
+  }
+  #title.off { opacity: 0; visibility: hidden; }
+
+  .title-inner { text-align: center; max-width: 620px; width: 100%; }
+
+  #title .kicker {
+    font: 500 10.5px/1 var(--mono);
+    letter-spacing: .42em;
+    text-transform: uppercase;
+    color: var(--ash-500);
+    margin-bottom: 22px;
+    animation: fadeUp 1s var(--ease) .2s both;
+  }
+  #title h1 {
+    margin: 0;
+    font: 400 clamp(38px, 8.4vw, 84px)/0.98 var(--serif);
+    letter-spacing: .015em;
+    color: var(--paper);
+    text-shadow: 0 0 60px #000, 0 2px 0 #0008;
+    animation: fadeUp 1.2s var(--ease) .35s both;
+  }
+  #title h1 span {
+    display: block;
+    font-size: .42em;
+    letter-spacing: .34em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-top: 16px;
+    font-family: var(--mono);
+  }
+  #title .tagline {
+    margin: 26px auto 34px;
+    max-width: 440px;
+    font: 400 clamp(13px, 1.4vw, 15px)/1.8 var(--serif);
+    color: #a9a79c;
+    font-style: italic;
+    animation: fadeUp 1.2s var(--ease) .6s both;
+  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px) } }
+
+  .menu { display: flex; flex-direction: column; gap: 9px; animation: fadeUp 1.2s var(--ease) .85s both; }
+  .mbtn {
+    padding: 13px 18px;
+    background: #0b0e0cc0;
+    border: 1px solid #ffffff1f;
+    border-radius: 2px;
+    color: var(--paper);
+    font: 500 12px/1 var(--mono);
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all .22s var(--ease);
+    backdrop-filter: blur(4px);
+  }
+  .mbtn:hover, .mbtn:focus-visible {
+    background: #16190f;
+    border-color: var(--amber);
+    color: var(--amber-soft);
+    letter-spacing: .3em;
+    outline: none;
+  }
+  .mbtn.ghost { background: transparent; border-color: #ffffff12; color: var(--ash-500); }
+  .mbtn.ghost:hover { color: var(--fog); border-color: #ffffff30; }
+  .mbtn[disabled] { opacity: .3; pointer-events: none; }
+
+  #title .foot {
+    margin-top: 30px;
+    font: 400 10.5px/1.8 var(--mono);
+    letter-spacing: .12em;
+    color: var(--ash-400);
+    animation: fadeUp 1.2s var(--ease) 1.1s both;
+  }
+  #title .foot a { color: var(--ash-500); text-decoration: none; border-bottom: 1px solid #ffffff14; }
+  #title .foot a:hover { color: var(--amber); }
+
+  /* ── боковые панели: журнал / рюкзак ───────────────────────── */
+
+  .panel {
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    display: grid;
+    place-items: center;
+    padding: var(--gut);
+    background: #04060590;
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .3s var(--ease), visibility .3s;
+  }
+  .panel.on { opacity: 1; visibility: visible; }
+
+  .panel-card {
+    width: min(100%, 640px);
+    max-height: min(78vh, 640px);
+    overflow: auto;
+    background: linear-gradient(180deg, #0e1210, #090b0a);
+    border: 1px solid #ffffff1a;
+    border-radius: 3px;
+    box-shadow: 0 40px 90px -30px #000;
+    padding: 26px 28px 30px;
+    transform: translateY(14px) scale(.99);
+    transition: transform .35s var(--ease);
+    scrollbar-width: thin;
+    scrollbar-color: var(--ash-400) transparent;
+  }
+  .panel.on .panel-card { transform: none; }
+  .panel-card::-webkit-scrollbar { width: 8px; }
+  .panel-card::-webkit-scrollbar-thumb { background: var(--ash-300); border-radius: 4px; }
+
+  .panel-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid #ffffff14;
+  }
+  .panel-head h2 {
+    margin: 0;
+    font: 400 22px/1 var(--serif);
+    color: var(--paper);
+  }
+  .panel-head .sub {
+    font: 500 10px/1 var(--mono);
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--ash-500);
+    margin-left: auto;
+  }
+
+  .entry {
+    padding: 12px 0;
+    border-bottom: 1px dashed #ffffff10;
+  }
+  .entry:last-child { border-bottom: 0; }
+  .entry h3 {
+    margin: 0 0 5px;
+    font: 600 11px/1 var(--mono);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--amber);
+  }
+  .entry p {
+    margin: 0;
+    font: 400 14px/1.65 var(--serif);
+    color: #bfbcb1;
+  }
+  .empty {
+    padding: 26px 0;
+    text-align: center;
+    font: 400 13px/1.6 var(--serif);
+    font-style: italic;
+    color: var(--ash-500);
+  }
+
+  .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .item {
+    padding: 12px 13px;
+    background: #12161380;
+    border: 1px solid #ffffff12;
+    border-radius: 2px;
+  }
+  .item .n {
+    display: flex; align-items: center; gap: 7px;
+    font: 600 11px/1.2 var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--bone);
+    margin-bottom: 5px;
+  }
+  .item .n em { margin-left: auto; color: var(--amber); font-style: normal; }
+  .item .d { font: 400 12.5px/1.5 var(--serif); color: #8f8d84; margin: 0; }
+
+  .rows { display: flex; flex-direction: column; gap: 9px; }
+  .row {
+    display: flex; align-items: center; gap: 12px;
+    font: 500 12px/1 var(--mono);
+    letter-spacing: .08em;
+    color: var(--fog);
+  }
+  .row .bar {
+    flex: 1;
+    height: 5px;
+    background: #ffffff10;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .row .bar i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--rust), var(--amber));
+    transition: width .6s var(--ease);
+  }
+  .row.trust .bar i { background: linear-gradient(90deg, #3d5a60, var(--ice)); }
+  .row b { color: var(--paper); min-width: 34px; text-align: right; }
+
+  /* переключатели настроек */
+  .opt { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px dashed #ffffff10; }
+  .opt:last-of-type { border-bottom: 0; }
+  .opt .lab { font: 400 14px/1.4 var(--serif); color: var(--paper); }
+  .opt .lab small { display: block; font: 400 12px/1.4 var(--serif); color: var(--ash-500); }
+  .seg { margin-left: auto; display: flex; border: 1px solid #ffffff18; border-radius: 2px; overflow: hidden; flex: none; }
+  .seg button {
+    padding: 7px 12px;
+    background: transparent;
+    border: 0;
+    color: var(--ash-500);
+    font: 500 10.5px/1 var(--mono);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background .2s, color .2s;
+  }
+  .seg button + button { border-left: 1px solid #ffffff12; }
+  .seg button[aria-pressed="true"] { background: var(--amber); color: #0b0e0c; }
+  .seg button:hover:not([aria-pressed="true"]) { color: var(--bone); background: #ffffff0a; }
+
+  /* ── мини-сцены: стелс, крафт, замок ───────────────────────── */
+
+  #mini {
+    position: fixed;
+    inset: 0;
+    z-index: 22;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: var(--gut);
+    background: radial-gradient(ellipse at 50% 50%, #05070680, #000000d8 70%);
+    backdrop-filter: blur(2px);
+  }
+  #mini.on { display: flex; animation: fadeUp .5s var(--ease) both; }
+
+  .mini-head { text-align: center; max-width: 520px; }
+  .mini-head h2 {
+    margin: 0 0 8px;
+    font: 500 12px/1 var(--mono);
+    letter-spacing: .3em;
+    text-transform: uppercase;
+    color: var(--amber);
+  }
+  .mini-head p { margin: 0; font: 400 14px/1.6 var(--serif); color: #b5b2a7; }
+
+  /* полоса шума */
+  .gauge {
+    width: min(100%, 460px);
+    height: 8px;
+    background: #ffffff10;
+    border: 1px solid #ffffff14;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .gauge i {
+    display: block; height: 100%;
+    background: linear-gradient(90deg, var(--moss), var(--amber) 60%, var(--blood));
+    width: 0;
+    transition: width .25s linear;
+  }
+  .gauge.crit { animation: shake .3s infinite; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0) } 25% { transform: translateX(-2px) } 75% { transform: translateX(2px) }
+  }
+
+  /* таймингова я полоса «шаг в тишине» */
+  .timing {
+    position: relative;
+    width: min(100%, 460px);
+    height: 46px;
+    background: #0b0e0cd0;
+    border: 1px solid #ffffff18;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .timing .zone {
+    position: absolute; top: 0; bottom: 0;
+    background: linear-gradient(180deg, #5b7a4a30, #5b7a4a55);
+    border-left: 1px solid var(--moss);
+    border-right: 1px solid var(--moss);
+  }
+  .timing .zone.perfect { background: linear-gradient(180deg, #c9a22740, #c9a22770); border-color: var(--amber); }
+  .timing .cursor {
+    position: absolute; top: 0; bottom: 0; width: 2px;
+    background: var(--paper);
+    box-shadow: 0 0 10px 2px #ffffff60;
+  }
+  .timing .ticks { position: absolute; inset: 0; opacity: .18;
+    background: repeating-linear-gradient(90deg, transparent 0 19px, var(--fog) 19px 20px); }
+
+  /* сетка крафта */
+  .parts { display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; max-width: 560px; }
+  .part {
+    padding: 10px 14px;
+    background: #0b0e0cd8;
+    border: 1px solid #ffffff1a;
+    border-radius: 2px;
+    color: var(--bone);
+    font: 500 11px/1 var(--mono);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all .2s var(--ease);
+  }
+  .part:hover { border-color: var(--amber); color: var(--amber-soft); }
+  .part[aria-pressed="true"] { background: var(--amber-dim); border-color: var(--amber); color: var(--amber-soft); }
+  .part[disabled] { opacity: .3; pointer-events: none; }
+
+  .mini-actions { display: flex; gap: 9px; flex-wrap: wrap; justify-content: center; }
+
+  .keyhint {
+    font: 500 10.5px/1 var(--mono);
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--ash-500);
+  }
+  .keyhint kbd {
+    display: inline-block;
+    padding: 3px 7px;
+    margin: 0 3px;
+    border: 1px solid #ffffff22;
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    color: var(--bone);
+    font: inherit;
+  }
+
+  /* ── финальный экран ───────────────────────────────────────── */
+
+  #end {
+    position: fixed;
+    inset: 0;
+    z-index: 26;
+    display: grid;
+    place-items: center;
+    padding: var(--gut);
+    background: linear-gradient(#000000d0, #000 70%);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 1.4s var(--ease), visibility 1.4s;
+  }
+  #end.on { opacity: 1; visibility: visible; }
+  .end-inner { max-width: 560px; text-align: center; }
+  #end .num {
+    font: 500 10.5px/1 var(--mono);
+    letter-spacing: .4em;
+    text-transform: uppercase;
+    color: var(--ash-500);
+    margin-bottom: 18px;
+  }
+  #end h2 {
+    margin: 0 0 20px;
+    font: 400 clamp(28px, 5.4vw, 48px)/1.1 var(--serif);
+    color: var(--paper);
+  }
+  #end p {
+    margin: 0 0 16px;
+    font: 400 15px/1.8 var(--serif);
+    color: #a8a69b;
+  }
+  #end .stats-out {
+    margin: 26px 0;
+    padding: 16px 0;
+    border-top: 1px solid #ffffff14;
+    border-bottom: 1px solid #ffffff14;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px 26px;
+    font: 500 11px/1.4 var(--mono);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ash-500);
+  }
+  #end .stats-out span { white-space: nowrap; }
+  #end .stats-out b { color: var(--amber); font-weight: 600; }
+
+  /* ── мобильные ─────────────────────────────────────────────── */
+
+  @media (max-width: 640px) {
+    /* На телефоне заголовок главы уезжает на свою строку — иначе
+       кнопки не помещаются и последняя срезается краем экрана. */
+    #topbar { flex-wrap: wrap; gap: 8px; padding-left: 12px; padding-right: 12px; }
+    #chapter { flex: 1 0 100%; }
+    #stats { margin: 0; }
+    .iconbtn { width: 30px; height: 30px; }
+    .iconbtn svg { width: 15px; height: 15px; }
+    #btnJournal { margin-left: auto; }
+    #box { padding: 15px 16px 17px; }
+    #text { line-height: 1.62; min-height: 4.86em; }
+    #stats { gap: 10px; }
+    .stat { font-size: 11px; }
+    .stat svg { width: 13px; height: 13px; }
+    #chapter b { font-size: 12px; }
+    .choice { padding: 11px 13px 11px 34px; }
+    .items { grid-template-columns: 1fr 1fr; }
+    .keyhint { display: none; }
+    #searchbar { font-size: 10px; padding: 6px 10px; }
+  }
+  @media (max-width: 380px) {
+    .items { grid-template-columns: 1fr; }
+    #stats .stat span { display: none; }
+  }
+
+  /* Мышью тут водить приятно, но пальцем — важнее: на тач-устройствах
+     подписи горячих точек показываем сразу, hover там не бывает. */
+  @media (hover: none) {
+    .hot .label { opacity: .75; }
+    .hot { width: 52px; height: 52px; margin: -26px 0 0 -26px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .12s !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="scene" aria-label="Иллюстрация сцены"></canvas>
+</div>
+<div id="wipe"></div>
+<div id="hotspots"></div>
+
+<div id="searchbar" role="status">
+  <span>Осмотреться · найдено <b id="found">0</b> из <b id="total">0</b></span>
+  <button id="sbGo">Идти дальше ▸</button>
+</div>
+
+<header id="topbar">
+  <div id="chapter">
+    <span id="chapNum">Глава I</span>
+    <b id="chapName">Карантинная зона</b>
+  </div>
+
+  <div id="stats" aria-live="polite">
+    <div class="stat" id="stHp" title="Состояние">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20s-7-4.5-7-9.5A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.5C19 15.5 12 20 12 20z"/></svg>
+      <span>100</span>
+    </div>
+    <div class="stat" id="stAmmo" title="Патроны">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 3h6l1 6-1 3H9L8 9z"/><path d="M9 12h6v8H9z"/></svg>
+      <span>0</span>
+    </div>
+    <div class="stat" id="stSup" title="Припасы">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 8h16v12H4z"/><path d="M4 8l2-4h12l2 4"/><path d="M12 8v12"/></svg>
+      <span>0</span>
+    </div>
+    <div class="stat" id="stTrust" title="Доверие Аси">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>
+      <span>0</span>
+    </div>
+  </div>
+
+  <button class="iconbtn" id="btnJournal" title="Журнал (J)" aria-label="Журнал">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h11l3 3v13H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
+  </button>
+  <button class="iconbtn" id="btnBag" title="Рюкзак (I)" aria-label="Рюкзак">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 9h12v11H6z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg>
+  </button>
+  <button class="iconbtn" id="btnSound" title="Звук (M)" aria-label="Звук">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 9h3l4-3v12l-4-3H5z"/><path d="M16 9.5a3.5 3.5 0 0 1 0 5" class="wave"/></svg>
+  </button>
+  <button class="iconbtn" id="btnMenu" title="Меню (Esc)" aria-label="Меню">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+</header>
+
+<div id="ui">
+  <div id="choices" role="group" aria-label="Варианты"></div>
+  <div id="box" role="region" aria-live="polite">
+    <div id="speaker"></div>
+    <p id="text"></p>
+    <div id="next">далее ▸</div>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<div id="mini" role="dialog" aria-modal="true"></div>
+
+<section id="title">
+  <div class="title-inner">
+    <div class="kicker">Интерактивная новелла</div>
+    <h1>Одиннадцатая<br>зима<span>Часть первая</span></h1>
+    <p class="tagline">Одиннадцать лет спустя города стоят пустые, а лес перешёл через кольцевую. Довези её до плотины. Всё остальное — не твоё дело.</p>
+    <div class="menu">
+      <button class="mbtn" id="btnContinue" disabled>Продолжить</button>
+      <button class="mbtn" id="btnNew">Новая игра</button>
+      <button class="mbtn ghost" id="btnSettings">Настройки</button>
+      <button class="mbtn ghost" id="btnAbout">О проекте</button>
+    </div>
+    <p class="foot">
+      Демо-работа из портфолио <a href="/">D.PUCHENKOV</a> · управление: <kbd>Space</kbd> далее, <kbd>1</kbd>–<kbd>4</kbd> выбор
+    </p>
+  </div>
+</section>
+
+<section class="panel" id="panelJournal" role="dialog" aria-modal="true">
+  <div class="panel-card">
+    <div class="panel-head"><h2>Журнал</h2><span class="sub">записи в пути</span></div>
+    <div id="journalBody"></div>
+    <div style="margin-top:22px"><button class="mbtn ghost" data-close>Закрыть</button></div>
+  </div>
+</section>
+
+<section class="panel" id="panelBag" role="dialog" aria-modal="true">
+  <div class="panel-card">
+    <div class="panel-head"><h2>Рюкзак</h2><span class="sub">то, что унесёшь</span></div>
+    <div class="rows" id="bagStats"></div>
+    <div style="height:18px"></div>
+    <div id="bagBody"></div>
+    <div style="margin-top:22px"><button class="mbtn ghost" data-close>Закрыть</button></div>
+  </div>
+</section>
+
+<section class="panel" id="panelSettings" role="dialog" aria-modal="true">
+  <div class="panel-card">
+    <div class="panel-head"><h2>Настройки</h2><span class="sub">под себя</span></div>
+
+    <div class="opt">
+      <div class="lab">Скорость текста<small>как быстро печатается реплика</small></div>
+      <div class="seg" id="segSpeed">
+        <button data-v="34">Медленно</button><button data-v="18">Обычно</button><button data-v="6">Быстро</button>
+      </div>
+    </div>
+    <div class="opt">
+      <div class="lab">Атмосфера<small>частицы, дождь, параллакс</small></div>
+      <div class="seg" id="segFx">
+        <button data-v="1">Вкл</button><button data-v="0">Выкл</button>
+      </div>
+    </div>
+    <div class="opt">
+      <div class="lab">Звук<small>синтезированный эмбиент и шаги</small></div>
+      <div class="seg" id="segSnd">
+        <button data-v="1">Вкл</button><button data-v="0">Выкл</button>
+      </div>
+    </div>
+    <div class="opt">
+      <div class="lab">Зернистость<small>плёночный шум поверх кадра</small></div>
+      <div class="seg" id="segGrain">
+        <button data-v="1">Вкл</button><button data-v="0">Выкл</button>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;display:flex;gap:9px;flex-wrap:wrap">
+      <button class="mbtn ghost" data-close>Закрыть</button>
+      <button class="mbtn ghost" id="btnWipe">Стереть сохранение</button>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="panelAbout" role="dialog" aria-modal="true">
+  <div class="panel-card">
+    <div class="panel-head"><h2>О проекте</h2><span class="sub">как это сделано</span></div>
+    <div class="entry">
+      <h3>Один файл</h3>
+      <p>Вся игра — это <em>index.html</em>: разметка, стили, сюжет, графика и звук. Ни одной внешней библиотеки, ни одного сетевого запроса, ни одной картинки в комплекте. Скачайте страницу — она запустится без интернета.</p>
+    </div>
+    <div class="entry">
+      <h3>Арты рисуются на лету</h3>
+      <p>Каждая сцена — процедурный canvas: силуэты города, лес, руины и снег собираются из детерминированного генератора по номеру сцены. Один и тот же кадр всегда выглядит одинаково, но нарисован он в момент показа, а не сохранён заранее.</p>
+    </div>
+    <div class="entry">
+      <h3>Звук синтезируется</h3>
+      <p>Ветер, капли, гул и щелчки — WebAudio: белый шум через фильтры и пара осцилляторов. Никаких mp3.</p>
+    </div>
+    <div class="entry">
+      <h3>Сеттинг</h3>
+      <p>Оригинальная история в жанре постапокалипсиса — почтительный поклон играм о дороге вдвоём. Персонажи, места и заражение придуманы для этой работы.</p>
+    </div>
+    <div style="margin-top:22px"><button class="mbtn ghost" data-close>Закрыть</button></div>
+  </div>
+</section>
+
+<section id="end">
+  <div class="end-inner">
+    <div class="num" id="endNum">Финал</div>
+    <h2 id="endTitle"></h2>
+    <div id="endText"></div>
+    <div class="stats-out" id="endStats"></div>
+    <div style="display:flex;gap:9px;justify-content:center;flex-wrap:wrap">
+      <button class="mbtn" id="btnAgain">Пройти заново</button>
+      <button class="mbtn ghost" id="btnToTitle">На заглавный экран</button>
+    </div>
+  </div>
+</section>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════
+   ОДИННАДЦАТАЯ ЗИМА
+   1. Утилиты и состояние      4. Сюжет
+   2. Звук (WebAudio)          5. Движок новеллы
+   3. Графика (canvas)         6. Интерфейс и запуск
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ───────────────────────── 1. Утилиты ─────────────────────── */
+
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp  = (a, b, t) => a + (b - a) * t;
+
+/* Детерминированный генератор: один и тот же сид — один и тот же
+   город. Без этого сцена «дышала» бы при каждом ресайзе. */
+function rngFrom(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s |= 0; s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hash(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+const rr = (r, a, b) => a + r() * (b - a);
+const ri = (r, a, b) => Math.floor(rr(r, a, b + 1));
+const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
+
+const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ── настройки и сохранение ────────────────────────────────── */
+
+const SAVE_KEY = 'zima11.save.v1';
+const OPT_KEY  = 'zima11.opts.v1';
+
+const opts = Object.assign({
+  speed: 18,          // мс на символ
+  fx: prefersReduced ? 0 : 1,
+  snd: 0,             // звук по умолчанию выключен: автозапуск всё равно заблокирован
+  grain: 1
+}, load(OPT_KEY) || {});
+
+function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function drop(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+/* Состояние партии. Всё, что нужно, чтобы восстановить игру
+   с точностью до реплики. */
+function freshState() {
+  return {
+    node: 'start',
+    hp: 100, ammo: 3, sup: 2, trust: 0,
+    items: {},          // id → количество
+    flags: {},          // произвольные метки сюжета
+    journal: [],        // {t, d}
+    searched: {},       // сцена → [индексы найденных точек]
+    chapter: 1,
+    seen: 0             // сколько узлов пройдено — для статистики финала
+  };
+}
+let S = freshState();
+
+const ITEMS = {
+  rag:     { n: 'Ветошь',        d: 'Полоса ткани от старой куртки. Горит, перевязывает, глушит звук.' },
+  spirt:   { n: 'Спирт',         d: 'Полбутылки медицинского. Валюта дороже патронов.' },
+  tape:    { n: 'Скотч',         d: 'Армированный, серый. Держит всё, кроме обещаний.' },
+  blade:   { n: 'Лезвие',        d: 'Обломок ножовки, обмотанный изолентой.' },
+  bottle:  { n: 'Бутылка',       d: 'Стекло, толстое дно. Летит далеко.' },
+  molotov: { n: 'Бутыль с огнём',d: 'Спирт, ветошь, скотч. Одноразовый ответ на любой вопрос.' },
+  bandage: { n: 'Перевязка',     d: 'Ветошь со спиртом. Не лечит, но даёт дойти.' },
+  filter:  { n: 'Фильтр',        d: 'Сменный патрон для респиратора. Дышать в спорах — три часа.' },
+  photo:   { n: 'Снимок',        d: 'Выцветшее фото: женщина с девочкой на плечах. Егор не объясняет.' },
+  radio:   { n: 'Рация',         d: 'Разбитый корпус, живая начинка. Ловит канал Артели.' },
+  key:     { n: 'Ключ-карта',    d: 'Пропуск инженера ГЭС. Одиннадцать лет в кармане мертвеца.' },
+  music:   { n: 'Кассета',       d: 'Плёнка без коробки, подписана от руки: «для дороги».' },
+  book:    { n: 'Комикс',        d: '«Ястреб-14», выпуск шестой. Углы обтрёпаны до бахромы.' }
+};
+
+/* ───────────────────── 2. Звук (WebAudio) ─────────────────── */
+/* Никаких файлов: шум и тон, отфильтрованные до нужного настроения. */
+
+const Audio_ = {
+  ctx: null, master: null, amb: null, ambGain: null, ready: false,
+
+  init() {
+    if (this.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0;
+    this.master.connect(this.ctx.destination);
+    this.ready = true;
+  },
+
+  /* Буфер розового-ish шума — основа ветра, дождя и помех. */
+  noiseBuf() {
+    if (this._nb) return this._nb;
+    const len = this.ctx.sampleRate * 3;
+    const b = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = b.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      last = (last + 0.02 * w) / 1.02;
+      d[i] = last * 3.2;
+    }
+    this._nb = b;
+    return b;
+  },
+
+  on() {
+    this.init();
+    if (!this.ready) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    this.master.gain.setTargetAtTime(0.5, this.ctx.currentTime, 0.6);
+  },
+  off() {
+    if (!this.ready) return;
+    this.master.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
+  },
+
+  /* Эмбиент сцены: тип задаёт фильтр и подложку. */
+  ambience(kind) {
+    this.init();
+    if (!this.ready) return;
+    if (this.amb) { try { this.amb.stop(); } catch (e) {} this.amb = null; }
+    if (this.drone) { try { this.drone.stop(); } catch (e) {} this.drone = null; }
+
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf(); src.loop = true;
+
+    const f = this.ctx.createBiquadFilter();
+    const g = this.ctx.createGain();
+
+    const preset = {
+      wind:   { type: 'lowpass',  freq: 420,  q: 0.7, gain: 0.16 },
+      rain:   { type: 'highpass', freq: 900,  q: 0.5, gain: 0.10 },
+      cave:   { type: 'lowpass',  freq: 220,  q: 1.2, gain: 0.20 },
+      snow:   { type: 'lowpass',  freq: 300,  q: 0.6, gain: 0.11 },
+      room:   { type: 'lowpass',  freq: 160,  q: 0.8, gain: 0.07 },
+      river:  { type: 'bandpass', freq: 700,  q: 0.4, gain: 0.13 },
+      calm:   { type: 'lowpass',  freq: 520,  q: 0.5, gain: 0.08 }
+    }[kind] || { type: 'lowpass', freq: 400, q: 0.7, gain: 0.12 };
+
+    f.type = preset.type; f.frequency.value = preset.freq; f.Q.value = preset.q;
+    g.gain.value = 0;
+    g.gain.setTargetAtTime(preset.gain, t, 1.6);
+
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start();
+    this.amb = src; this.ambGain = g;
+
+    /* Низкий гул — «нехорошее место». */
+    if (kind === 'cave' || kind === 'room') {
+      const o = this.ctx.createOscillator();
+      const og = this.ctx.createGain();
+      o.type = 'sine'; o.frequency.value = kind === 'cave' ? 44 : 58;
+      og.gain.value = 0; og.gain.setTargetAtTime(0.05, t, 2.5);
+      o.connect(og); og.connect(this.master); o.start();
+      this.drone = o;
+    }
+  },
+
+  /* Короткие события. */
+  blip(freq = 620, dur = 0.05, type = 'square', vol = 0.05) {
+    this.init();
+    if (!this.ready || this.master.gain.value < 0.01) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+  thud() { this.blip(70, 0.28, 'sine', 0.16); },
+  click_() { this.blip(1500, 0.02, 'square', 0.025); },
+  page() { this.blip(320, 0.07, 'triangle', 0.05); },
+  bad()  { this.blip(150, 0.4, 'sawtooth', 0.08); },
+  good() { this.blip(680, 0.09, 'triangle', 0.06); setTimeout(() => this.blip(920, 0.12, 'triangle', 0.05), 90); }
+};
+
+/* ───────────────────── 3. Графика (canvas) ────────────────── */
+/* Сцена собирается из слоёв. Каждый слой печётся один раз в свой
+   офскрин-холст, а в кадре только сдвигается — так параллакс и
+   частицы работают даже на слабом железе. */
+
+const PAD = 60;   // запас вокруг кадра под сдвиг слоёв
+
+const Art = {
+  cv: $('#scene'), ctx: null,
+  w: 0, h: 0, dpr: 1,
+  layers: [], fx: {}, scene: null, sceneId: '',
+  parts: [], mx: 0, my: 0, px: 0, py: 0,
+  born: 0, raf: 0, running: false,
+  grainTiles: [], vign: null, lastT: 0,
+
+  boot() {
+    this.ctx = this.cv.getContext('2d', { alpha: false });
+    this.makeGrain();
+    addEventListener('resize', () => this.resize(), { passive: true });
+    addEventListener('orientationchange', () => setTimeout(() => this.resize(), 250));
+    addEventListener('pointermove', e => {
+      this.mx = (e.clientX / innerWidth - .5) * 2;
+      this.my = (e.clientY / innerHeight - .5) * 2;
+    }, { passive: true });
+    this.resize();
+    this.start();
+  },
+
+  resize() {
+    const r = this.cv.getBoundingClientRect();
+    this.dpr = Math.min(devicePixelRatio || 1, 1.75);
+    this.w = Math.max(320, Math.round(r.width || innerWidth));
+    this.h = Math.max(240, Math.round(r.height || innerHeight));
+    this.cv.width  = Math.round(this.w * this.dpr);
+    this.cv.height = Math.round(this.h * this.dpr);
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.makeVignette();
+    if (this.sceneId) this.bake();
+  },
+
+  /* Плёночное зерно: несколько тайлов, которые крутятся по кругу. */
+  makeGrain() {
+    for (let k = 0; k < 4; k++) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 100;
+      const g = c.getContext('2d');
+      const img = g.createImageData(100, 100);
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = 118 + (Math.random() * 74 - 37);
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+        img.data[i + 3] = 26;
+      }
+      g.putImageData(img, 0, 0);
+      this.grainTiles.push(this.ctx.createPattern(c, 'repeat'));
+    }
+  },
+
+  makeVignette() {
+    const c = document.createElement('canvas');
+    c.width = this.w; c.height = this.h;
+    const g = c.getContext('2d');
+    const rad = Math.hypot(this.w, this.h) * .62;
+    const grd = g.createRadialGradient(this.w / 2, this.h * .46, rad * .28, this.w / 2, this.h * .5, rad);
+    grd.addColorStop(0, 'rgba(0,0,0,0)');
+    grd.addColorStop(.62, 'rgba(0,0,0,.28)');
+    grd.addColorStop(1, 'rgba(0,0,0,.86)');
+    g.fillStyle = grd; g.fillRect(0, 0, this.w, this.h);
+    this.vign = c;
+  },
+
+  show(id) {
+    if (!SCENES[id]) id = 'qz_night';
+    this.sceneId = id;
+    this.scene = SCENES[id];
+    this.born = performance.now();
+    this.bake();
+    if (opts.snd) Audio_.ambience(this.scene.amb);
+  },
+
+  bake() {
+    const sc = this.scene; if (!sc) return;
+    const rng = rngFrom(hash(this.sceneId));
+    const W = this.w, H = this.h;
+    this.fx = sc.fx || {};
+    this.layers = sc.layers(W, H, rng).map(l => {
+      const c = document.createElement('canvas');
+      c.width = Math.round((W + PAD * 2) * this.dpr);
+      c.height = Math.round((H + PAD * 2) * this.dpr);
+      const g = c.getContext('2d');
+      g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      g.translate(PAD, PAD);
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      l.f(g, W, H, rngFrom(hash(this.sceneId + (l.k || '') + l.d)));
+      return { d: l.d, cv: c };
+    });
+    this.seedParticles();
+  },
+
+  seedParticles() {
+    this.parts = [];
+    if (!opts.fx) return;
+    const area = (this.w * this.h) / (1280 * 720);
+    const add = (n, type) => {
+      for (let i = 0; i < Math.round(n * clamp(area, .45, 1.35)); i++) {
+        this.parts.push({
+          t: type,
+          x: Math.random() * (this.w + 120) - 60,
+          y: Math.random() * (this.h + 120) - 60,
+          z: .25 + Math.random() * .95,
+          r: Math.random() * Math.PI * 2,
+          s: Math.random()
+        });
+      }
+    };
+    const f = this.fx;
+    if (f.rain)      add(f.rain, 'rain');
+    if (f.snow)      add(f.snow, 'snow');
+    if (f.spores)    add(f.spores, 'spore');
+    if (f.ash)       add(f.ash, 'ash');
+    if (f.embers)    add(f.embers, 'ember');
+    if (f.fireflies) add(f.fireflies, 'fly');
+    if (f.dust)      add(f.dust, 'dust');
+  },
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    const loop = now => {
+      this.raf = requestAnimationFrame(loop);
+      this.draw(now);
+    };
+    this.raf = requestAnimationFrame(loop);
+  },
+  stop() { cancelAnimationFrame(this.raf); this.running = false; },
+
+  draw(now) {
+    const g = this.ctx, W = this.w, H = this.h;
+    if (!this.scene) { g.fillStyle = '#07100a'; g.fillRect(0, 0, W, H); return; }
+    const t  = (now - this.born) / 1000;
+    const dt = Math.min(.05, (now - this.lastT) / 1000 || .016);
+    this.lastT = now;
+
+    /* Камера: медленный дрейф + мягкий наезд на входе в сцену. */
+    const drift = opts.fx ? 1 : 0;
+    this.px = lerp(this.px, this.mx * 16 * drift + Math.sin(t * .21) * 7 * drift, .05);
+    this.py = lerp(this.py, this.my * 9 * drift + Math.cos(t * .17) * 4 * drift, .05);
+    const zoom = 1 + .035 * Math.exp(-t / 1.4);
+
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    g.fillStyle = '#050706';
+    g.fillRect(0, 0, W, H);
+
+    g.save();
+    g.translate(W / 2, H / 2); g.scale(zoom, zoom); g.translate(-W / 2, -H / 2);
+
+    for (const l of this.layers) {
+      g.drawImage(l.cv, -PAD + this.px * l.d, -PAD + this.py * l.d * .6, W + PAD * 2, H + PAD * 2);
+    }
+    if (this.scene.frame) { g.save(); this.scene.frame(g, W, H, t, this); g.restore(); }
+    if (opts.fx) { this.drawFog(g, W, H, t); this.drawParts(g, W, H, t, dt); }
+    g.restore();
+
+    /* Постобработка кадра */
+    if (this.fx.tint) {
+      g.globalCompositeOperation = 'overlay';
+      g.globalAlpha = this.fx.tintA || .18;
+      g.fillStyle = this.fx.tint;
+      g.fillRect(0, 0, W, H);
+      g.globalCompositeOperation = 'source-over';
+      g.globalAlpha = 1;
+    }
+    if (this.vign) g.drawImage(this.vign, 0, 0, W, H);
+    if (opts.grain) {
+      g.globalAlpha = .5;
+      g.fillStyle = this.grainTiles[(Math.floor(t * 11) % 4 + 4) % 4];
+      g.fillRect(0, 0, W, H);
+      g.globalAlpha = 1;
+    }
+    /* Проявление кадра из черноты */
+    const fade = clamp(1 - t / .9, 0, 1);
+    if (fade > 0.001) { g.fillStyle = 'rgba(0,0,0,' + fade + ')'; g.fillRect(0, 0, W, H); }
+  },
+
+  drawFog(g, W, H, t) {
+    const n = this.fx.fog || 0;
+    if (!n) return;
+    for (let i = 0; i < 3; i++) {
+      const y = H * (.5 + i * .13) + Math.sin(t * .18 + i) * 8;
+      const hh = H * (.14 + i * .05);
+      const grd = g.createLinearGradient(0, y - hh, 0, y + hh);
+      const col = this.fx.fogColor || '200,208,206';
+      grd.addColorStop(0, 'rgba(' + col + ',0)');
+      grd.addColorStop(.5, 'rgba(' + col + ',' + (n * (.16 - i * .03)) + ')');
+      grd.addColorStop(1, 'rgba(' + col + ',0)');
+      g.fillStyle = grd;
+      const off = ((t * (6 + i * 4)) % (W * 2)) - W;
+      g.fillRect(off, y - hh, W * 2, hh * 2);
+      g.fillRect(off - W * 2, y - hh, W * 2, hh * 2);
+    }
+  },
+
+  drawParts(g, W, H, t, dt) {
+    const wind = this.fx.wind == null ? 1 : this.fx.wind;
+    for (const p of this.parts) {
+      switch (p.t) {
+        case 'rain': {
+          p.y += (620 + p.z * 520) * dt;
+          p.x += (46 * wind) * dt * (1 + p.z);
+          if (p.y > H + 20) { p.y = -20; p.x = Math.random() * (W + 120) - 60; }
+          g.strokeStyle = 'rgba(178,196,200,' + (.10 + p.z * .2) + ')';
+          g.lineWidth = .6 + p.z * .7;
+          g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - 3 * wind, p.y - 11 - p.z * 12); g.stroke();
+          break;
+        }
+        case 'snow': {
+          p.y += (16 + p.z * 34) * dt;
+          p.x += Math.sin(t * .7 + p.r) * 11 * dt + 9 * wind * dt;
+          if (p.y > H + 10) { p.y = -10; p.x = Math.random() * (W + 120) - 60; }
+          if (p.x > W + 60) p.x = -60;
+          g.fillStyle = 'rgba(232,236,238,' + (.16 + p.z * .5) + ')';
+          g.beginPath(); g.arc(p.x, p.y, .5 + p.z * 1.7, 0, 6.284); g.fill();
+          break;
+        }
+        case 'spore': {
+          p.y -= (5 + p.z * 12) * dt;
+          p.x += Math.sin(t * .5 + p.r) * 14 * dt;
+          if (p.y < -20) { p.y = H + 20; p.x = Math.random() * W; }
+          const a = (.12 + p.z * .34) * (.6 + .4 * Math.sin(t * 1.6 + p.r * 4));
+          g.fillStyle = 'rgba(216,196,132,' + a + ')';
+          g.beginPath(); g.arc(p.x, p.y, .7 + p.z * 2.1, 0, 6.284); g.fill();
+          break;
+        }
+        case 'ash': {
+          p.y += (12 + p.z * 20) * dt;
+          p.x += Math.sin(t * .35 + p.r) * 16 * dt + 12 * wind * dt;
+          if (p.y > H + 10) { p.y = -10; p.x = Math.random() * (W + 120) - 60; }
+          g.fillStyle = 'rgba(180,178,170,' + (.08 + p.z * .18) + ')';
+          g.fillRect(p.x, p.y, .8 + p.z, .8 + p.z);
+          break;
+        }
+        case 'ember': {
+          p.y -= (34 + p.z * 60) * dt;
+          p.x += Math.sin(t * 1.9 + p.r) * 20 * dt;
+          if (p.y < H * .18) { p.y = H * .78 + Math.random() * 30; p.x = W * .5 + (Math.random() - .5) * 90; }
+          const a = clamp((p.y - H * .2) / (H * .5), 0, 1) * (.5 + p.z * .5);
+          g.fillStyle = 'rgba(' + (240 - p.s * 60 | 0) + ',' + (150 + p.s * 40 | 0) + ',60,' + a + ')';
+          g.beginPath(); g.arc(p.x, p.y, .6 + p.z * 1.4, 0, 6.284); g.fill();
+          break;
+        }
+        case 'fly': {
+          p.x += Math.sin(t * .6 + p.r * 3) * 13 * dt;
+          p.y += Math.cos(t * .43 + p.r * 2) * 10 * dt;
+          const a = Math.max(0, Math.sin(t * 1.3 + p.r * 6)) * (.35 + p.z * .5);
+          g.fillStyle = 'rgba(206,214,120,' + a + ')';
+          g.beginPath(); g.arc(p.x, p.y, .8 + p.z * 1.5, 0, 6.284); g.fill();
+          break;
+        }
+        default: { // dust
+          p.x += (7 + p.z * 12) * dt * wind;
+          p.y += Math.sin(t * .4 + p.r) * 6 * dt;
+          if (p.x > W + 30) p.x = -30;
+          g.fillStyle = 'rgba(226,220,196,' + (.05 + p.z * .16) + ')';
+          g.beginPath(); g.arc(p.x, p.y, .5 + p.z * 1.2, 0, 6.284); g.fill();
+        }
+      }
+    }
+  }
+};
+
+/* ── кисти: из этих примитивов собраны все кадры ───────────── */
+
+function skyGrad(g, w, h, stops) {
+  const grd = g.createLinearGradient(0, -PAD, 0, h + PAD);
+  stops.forEach(([p, c]) => grd.addColorStop(p, c));
+  g.fillStyle = grd;
+  g.fillRect(-PAD, -PAD, w + PAD * 2, h + PAD * 2);
+}
+
+function glow(g, x, y, r, col, a = 1) {
+  const grd = g.createRadialGradient(x, y, 0, x, y, r);
+  grd.addColorStop(0, 'rgba(' + col + ',' + a + ')');
+  grd.addColorStop(.45, 'rgba(' + col + ',' + a * .32 + ')');
+  grd.addColorStop(1, 'rgba(' + col + ',0)');
+  g.fillStyle = grd;
+  g.beginPath(); g.arc(x, y, r, 0, 6.284); g.fill();
+}
+
+/* Гряда холмов: ломаная со случайным смещением середины. */
+function ridge(g, w, h, y, amp, col, rng, rough = .55) {
+  const pts = [[-PAD, y], [w + PAD, y + rr(rng, -amp * .4, amp * .4)]];
+  let list = pts;
+  for (let it = 0; it < 6; it++) {
+    const out = [list[0]];
+    for (let i = 1; i < list.length; i++) {
+      const a = list[i - 1], b = list[i];
+      const mx = (a[0] + b[0]) / 2;
+      const my = (a[1] + b[1]) / 2 + rr(rng, -1, 1) * amp * Math.pow(rough, it);
+      out.push([mx, my], b);
+    }
+    list = out;
+  }
+  g.beginPath();
+  g.moveTo(list[0][0], list[0][1]);
+  for (const p of list) g.lineTo(p[0], p[1]);
+  g.lineTo(w + PAD, h + PAD); g.lineTo(-PAD, h + PAD); g.closePath();
+  g.fillStyle = col; g.fill();
+}
+
+/* Городской силуэт. lit — доля окон, в которых ещё есть свет. */
+function skyline(g, w, h, base, col, rng, o = {}) {
+  const minH = o.minH || 40, maxH = o.maxH || 190;
+  let x = -PAD - rr(rng, 0, 40);
+  while (x < w + PAD) {
+    const bw = rr(rng, o.minW || 26, o.maxW || 78);
+    const bh = rr(rng, minH, maxH);
+    const top = base - bh;
+    g.fillStyle = col;
+    g.fillRect(x, top, bw, bh + PAD);
+
+    /* Обрушенная кровля — у каждого третьего дома. */
+    if (rng() < .38) {
+      g.beginPath();
+      g.moveTo(x, top);
+      const steps = ri(rng, 3, 6);
+      for (let i = 0; i <= steps; i++) {
+        g.lineTo(x + bw * (i / steps), top - rr(rng, -3, 16));
+      }
+      g.lineTo(x + bw, top + 12); g.lineTo(x, top + 12); g.closePath();
+      g.fill();
+    }
+    /* Антенны и трубы */
+    if (rng() < .3) {
+      const ax = x + bw * rr(rng, .2, .8);
+      g.strokeStyle = col; g.lineWidth = 1.6;
+      g.beginPath(); g.moveTo(ax, top); g.lineTo(ax, top - rr(rng, 12, 34)); g.stroke();
+    }
+    /* Окна */
+    if (o.win !== false) {
+      const cw = 4.4, ch = 6.6, gapx = 5.4, gapy = 8.4;
+      const cols = Math.max(1, Math.floor((bw - 8) / (cw + gapx)));
+      const rows = Math.max(1, Math.floor((bh - 12) / (ch + gapy)));
+      for (let cx = 0; cx < cols; cx++) {
+        for (let cy = 0; cy < rows; cy++) {
+          const wx = x + 5 + cx * (cw + gapx);
+          const wy = top + 9 + cy * (ch + gapy);
+          const roll = rng();
+          if (roll < (o.lit || 0)) {
+            g.fillStyle = o.litCol || 'rgba(214,168,72,.72)';
+            g.fillRect(wx, wy, cw, ch);
+            glow(g, wx + cw / 2, wy + ch / 2, 13, o.litRGB || '214,168,72', .16);
+          } else if (roll < .74) {
+            g.fillStyle = o.winCol || 'rgba(0,0,0,.34)';
+            g.fillRect(wx, wy, cw, ch);
+          }
+        }
+      }
+    }
+    x += bw + rr(rng, 2, 13);
+  }
+}
+
+/* Деревья. Три породы: ель, лиственное и мёртвый ствол. */
+function pine(g, x, y, hh, col) {
+  g.fillStyle = col;
+  g.fillRect(x - hh * .022, y - hh * .22, hh * .045, hh * .24);
+  const tiers = 5;
+  for (let i = 0; i < tiers; i++) {
+    const t = i / tiers;
+    const wy = y - hh * (.16 + t * .78);
+    const ww = hh * (.3 - t * .21);
+    const hgt = hh * .3;
+    g.beginPath();
+    g.moveTo(x, wy - hgt);
+    g.lineTo(x + ww, wy);
+    g.lineTo(x + ww * .45, wy);
+    g.lineTo(x, wy - hgt * .2);
+    g.lineTo(x - ww * .45, wy);
+    g.lineTo(x - ww, wy);
+    g.closePath(); g.fill();
+  }
+}
+
+function broadleaf(g, x, y, hh, col, rng) {
+  g.strokeStyle = col; g.fillStyle = col;
+  g.lineWidth = hh * .05;
+  g.beginPath(); g.moveTo(x, y); g.lineTo(x + rr(rng, -.04, .04) * hh, y - hh * .45); g.stroke();
+  const cy = y - hh * .62, cr = hh * .3;
+  for (let i = 0; i < 9; i++) {
+    const a = rr(rng, 0, 6.284), d = rr(rng, 0, cr * .8);
+    g.beginPath();
+    g.arc(x + Math.cos(a) * d, cy + Math.sin(a) * d * .72, rr(rng, cr * .3, cr * .58), 0, 6.284);
+    g.fill();
+  }
+}
+
+function deadTree(g, x, y, hh, col, rng) {
+  g.strokeStyle = col; g.lineCap = 'round';
+  const branch = (x0, y0, ang, len, wdt, depth) => {
+    if (depth > 3 || len < 5) return;
+    const x1 = x0 + Math.cos(ang) * len, y1 = y0 + Math.sin(ang) * len;
+    g.lineWidth = wdt;
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    const n = depth === 0 ? 3 : 2;
+    for (let i = 0; i < n; i++) {
+      branch(x1, y1, ang + rr(rng, -.85, .85), len * rr(rng, .5, .74), wdt * .58, depth + 1);
+    }
+  };
+  branch(x, y, -Math.PI / 2 + rr(rng, -.12, .12), hh * .42, hh * .055, 0);
+}
+
+function treeRow(g, w, y, col, rng, o = {}) {
+  const n = o.n || 14;
+  for (let i = 0; i < n; i++) {
+    const x = rr(rng, -PAD, w + PAD);
+    const hh = rr(rng, o.min || 60, o.max || 150);
+    const roll = rng();
+    if (roll < (o.dead || .2)) deadTree(g, x, y + rr(rng, -4, 4), hh, col, rng);
+    else if (roll < (o.dead || .2) + (o.pine || .5)) pine(g, x, y + rr(rng, -4, 4), hh, col);
+    else broadleaf(g, x, y + rr(rng, -4, 4), hh, col, rng);
+  }
+}
+
+/* Трава и кусты по линии земли. */
+function grassRow(g, x0, x1, y, hh, col, rng, n = 90) {
+  g.strokeStyle = col; g.lineWidth = 1.5; g.lineCap = 'round';
+  for (let i = 0; i < n; i++) {
+    const x = rr(rng, x0, x1), l = rr(rng, hh * .35, hh);
+    const bend = rr(rng, -l * .5, l * .5);
+    g.beginPath();
+    g.moveTo(x, y + rr(rng, -2, 4));
+    g.quadraticCurveTo(x + bend * .4, y - l * .6, x + bend, y - l);
+    g.stroke();
+  }
+}
+
+function rubble(g, x0, x1, y, col, rng, n = 30) {
+  g.fillStyle = col;
+  for (let i = 0; i < n; i++) {
+    const x = rr(rng, x0, x1), yy = y + rr(rng, -6, 10), s = rr(rng, 2, 11);
+    g.beginPath();
+    g.moveTo(x, yy);
+    const k = ri(rng, 3, 5);
+    for (let j = 0; j < k; j++) {
+      const a = j / k * 6.284;
+      g.lineTo(x + Math.cos(a) * s * rr(rng, .5, 1), yy + Math.sin(a) * s * rr(rng, .25, .6));
+    }
+    g.closePath(); g.fill();
+  }
+}
+
+/* Остов машины: главный «мебельный» объект постапокалипсиса. */
+function carHusk(g, x, y, s, col, rng) {
+  g.save(); g.translate(x, y); g.scale(s, s);
+  g.fillStyle = col;
+  g.beginPath();
+  g.moveTo(-52, 0); g.lineTo(-56, -12); g.lineTo(-40, -15);
+  g.lineTo(-26, -30); g.lineTo(16, -32); g.lineTo(32, -14);
+  g.lineTo(54, -12); g.lineTo(52, 0);
+  g.closePath(); g.fill();
+  /* провалившаяся крыша у половины остовов */
+  if (rng() < .5) { g.clearRect(-16, -34, 22, 8); }
+  g.beginPath(); g.arc(-32, 0, 10, Math.PI, 0); g.fill();
+  g.beginPath(); g.arc(30, 0, 10, Math.PI, 0); g.fill();
+  g.restore();
+}
+
+/* Кусок стены с пустыми оконными проёмами. */
+function wallRuin(g, x, y, ww, hh, col, rng, dark = 'rgba(0,0,0,.55)') {
+  g.fillStyle = col;
+  g.beginPath();
+  g.moveTo(x, y);
+  const steps = ri(rng, 4, 8);
+  for (let i = 0; i <= steps; i++) {
+    g.lineTo(x + (ww * i / steps), y - hh + rr(rng, -hh * .18, hh * .1));
+  }
+  g.lineTo(x + ww, y); g.closePath(); g.fill();
+  const cols = Math.max(1, Math.floor(ww / 46));
+  const rows = Math.max(1, Math.floor(hh / 56));
+  g.fillStyle = dark;
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      if (rng() < .28) continue;
+      g.fillRect(x + 14 + i * 46, y - hh + 20 + j * 56, 22, 30);
+    }
+  }
+  /* торчащая арматура */
+  g.strokeStyle = col; g.lineWidth = 1.4;
+  for (let i = 0; i < 5; i++) {
+    const bx = x + rr(rng, 4, ww - 4);
+    g.beginPath();
+    g.moveTo(bx, y - hh + 6);
+    g.quadraticCurveTo(bx + rr(rng, -6, 6), y - hh - 8, bx + rr(rng, -12, 12), y - hh - rr(rng, 8, 22));
+    g.stroke();
+  }
+}
+
+/* Человеческий силуэт. Игра держится на этих фигурах — им
+   отдано больше всего параметров. */
+function figure(g, x, y, hh, col, o = {}) {
+  const u = hh / 8, s = o.slim ? .78 : 1;
+  g.save();
+  g.translate(x, y);
+  if (o.flip) g.scale(-1, 1);
+  g.rotate(o.lean || 0);
+  g.fillStyle = col; g.strokeStyle = col;
+  g.lineCap = 'round'; g.lineJoin = 'round';
+
+  const c = o.crouch ? 1 : 0, sit = o.sit ? 1 : 0;
+  const hipY  = sit ? -1.75 * u : -3.4 * u + c * 1.15 * u;
+  const shY   = sit ? -4.45 * u : -6.15 * u + c * 1.5 * u;
+  const headY = sit ? -5.4 * u  : -7.05 * u + c * 1.6 * u;
+
+  /* ноги. Сидя колени уходят вперёд, в присяде — под себя. */
+  g.lineWidth = u * .52 * s;
+  if (sit) {
+    for (const dz of [0, u * .2]) {
+      g.beginPath();
+      g.moveTo(0, hipY);
+      g.lineTo(u * 1.45 + dz, hipY - u * .5);
+      g.lineTo(u * 2.05 + dz, 0);
+      g.stroke();
+    }
+  } else {
+    const legs = o.legs || [.2, -.18];
+    for (const a of legs) {
+      const fx = Math.sin(a) * u * (c ? 1 : 1.7);
+      const kx = Math.sin(a) * u * .8 + c * u * .75;
+      g.beginPath();
+      g.moveTo(0, hipY);
+      g.lineTo(kx, hipY / 2 + c * u * .25);
+      g.lineTo(fx, 0);
+      g.stroke();
+    }
+  }
+
+  /* рюкзак — рисуем до корпуса, чтобы он ушёл за спину */
+  if (o.pack) {
+    g.beginPath();
+    const px = -u * .95, py = shY + u * .35;
+    g.moveTo(px, py);
+    g.quadraticCurveTo(px - u * .75, py + u * 1.2, px - u * .15, hipY + u * .1);
+    g.lineTo(px + u * .55, hipY + u * .05);
+    g.lineTo(px + u * .45, py - u * .1);
+    g.closePath(); g.fill();
+  }
+
+  /* корпус */
+  g.beginPath();
+  g.moveTo(-u * .78 * s, shY);
+  g.lineTo(u * .78 * s, shY);
+  g.quadraticCurveTo(u * .82 * s, hipY - u * .8, u * .62 * s, hipY + u * .1);
+  g.lineTo(-u * .62 * s, hipY + u * .1);
+  g.quadraticCurveTo(-u * .82 * s, hipY - u * .8, -u * .78 * s, shY);
+  g.closePath(); g.fill();
+
+  /* руки */
+  g.lineWidth = u * .4 * s;
+  const arms = o.arms || 'down';
+  const drawArm = (ex, ey, hx, hy) => {
+    g.beginPath(); g.moveTo(0, shY + u * .1); g.lineTo(ex, ey); g.lineTo(hx, hy); g.stroke();
+  };
+  if (arms === 'aim') {
+    drawArm(u * .9, shY + u * .75, u * 2.05, shY + u * .35);
+    drawArm(u * .5, shY + u * .95, u * 1.5, shY + u * .5);
+  } else if (arms === 'reach') {
+    drawArm(u * .95, shY + u * .5, u * 1.9, shY - u * .35);
+    drawArm(-u * .55, shY + u * 1.1, -u * .7, hipY);
+  } else if (arms === 'hold') {           // держит за руку спутника
+    drawArm(u * .8, shY + u * .9, u * 1.55, shY + u * 1.9);
+    drawArm(-u * .6, shY + u * 1.05, -u * .5, hipY + u * .2);
+  } else if (arms === 'lamp') {
+    drawArm(u * .85, shY + u * .6, u * 1.75, shY + u * .1);
+    drawArm(-u * .5, shY + u * 1.1, -u * .45, hipY + u * .1);
+  } else if (sit) {
+    drawArm(u * .85, shY + u * .95, u * 1.5, hipY - u * .45);
+    drawArm(u * .35, shY + u * 1.1, u * 1.15, hipY - u * .3);
+  } else {
+    drawArm(u * .7, shY + u * 1.05, u * .55, hipY + u * .35);
+    drawArm(-u * .7, shY + u * 1.05, -u * .55, hipY + u * .35);
+  }
+
+  /* шея, голова, капюшон и хвост волос */
+  g.fillRect(-u * .21 * s, headY, u * .42 * s, shY - headY + u * .12);
+  g.beginPath(); g.arc(0, headY, u * .52 * s, 0, 6.284); g.fill();
+  if (o.hood) {
+    g.beginPath();
+    g.moveTo(-u * .8, shY + u * .1);
+    g.quadraticCurveTo(-u * .95, headY - u * .5, 0, headY - u * .78);
+    g.quadraticCurveTo(u * .8, headY - u * .5, u * .55, shY + u * .1);
+    g.closePath(); g.fill();
+  }
+  if (o.hair) {
+    g.beginPath();
+    g.moveTo(-u * .3, headY - u * .35);
+    g.quadraticCurveTo(-u * 1.25, headY + u * .1, -u * .85, headY + u * .95);
+    g.quadraticCurveTo(-u * .45, headY + u * .25, -u * .1, headY + u * .3);
+    g.closePath(); g.fill();
+  }
+  /* оружие за спиной или в руках */
+  if (o.gun === 'back') {
+    g.lineWidth = u * .19;
+    g.beginPath(); g.moveTo(-u * 1.5, shY + u * 1.9); g.lineTo(u * .1, shY - u * .5); g.stroke();
+  } else if (o.gun === 'aim') {
+    g.lineWidth = u * .21;
+    g.beginPath(); g.moveTo(u * 1.15, shY + u * .55); g.lineTo(u * 2.85, shY + u * .28); g.stroke();
+  }
+  g.restore();
+}
+
+/* Стая птиц вдалеке — жизнь в мёртвом кадре. */
+function birds(g, x, y, n, col, rng, sc = 1) {
+  g.strokeStyle = col; g.lineWidth = 1.1;
+  for (let i = 0; i < n; i++) {
+    const bx = x + rr(rng, -90, 90), by = y + rr(rng, -40, 40), s = rr(rng, 2.4, 4.6) * sc;
+    g.beginPath();
+    g.moveTo(bx - s, by);
+    g.quadraticCurveTo(bx - s * .5, by - s * .7, bx, by - s * .1);
+    g.quadraticCurveTo(bx + s * .5, by - s * .7, bx + s, by);
+    g.stroke();
+  }
+}
+
+/* Провода: два столба и провисание между ними. */
+function powerLine(g, x, y, hh, col, span, n) {
+  g.strokeStyle = col; g.lineWidth = 2.6;
+  for (let i = 0; i <= n; i++) {
+    const px = x + i * span;
+    g.beginPath(); g.moveTo(px, y); g.lineTo(px, y - hh); g.stroke();
+    g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(px - hh * .16, y - hh * .88); g.lineTo(px + hh * .16, y - hh * .88); g.stroke();
+    if (i < n) {
+      g.lineWidth = 1.1;
+      for (const off of [-hh * .14, 0, hh * .14]) {
+        g.beginPath();
+        g.moveTo(px + off * .8, y - hh * .88);
+        g.quadraticCurveTo(px + span / 2, y - hh * .88 + Math.abs(off) * .4 + span * .12, px + span + off * .8, y - hh * .88);
+        g.stroke();
+      }
+    }
+    g.lineWidth = 2.6;
+  }
+}
+
+/* ── сцены ─────────────────────────────────────────────────── */
+
+const SCENES = {
+
+  /* Карантинная зона. Ночь, дождь, прожектор на вышке.
+     Во всех сценах «сцена актёров» держится левее или правее центра:
+     по центру внизу стоит диалоговое окно, и оно не должно
+     закрывать людей. */
+  qz_night: {
+    amb: 'rain',
+    fx: { rain: 320, fog: .5, fogColor: '150,170,180', tint: '#1b3d55', tintA: .22, wind: 1.3 },
+    layers(w, h, rng) {
+      return [
+        { d: 0, k: 'sky', f: (g, W, Hh, r) => {
+          skyGrad(g, w, h, [[0, '#080d13'], [.42, '#101d2b'], [.72, '#1a2c3a'], [1, '#0b1216']]);
+          glow(g, w * .74, h * .16, h * .55, '130,158,182', .13);
+          for (let i = 0; i < 28; i++) {
+            g.fillStyle = 'rgba(10,17,24,' + rr(r, .2, .55) + ')';
+            g.beginPath();
+            g.ellipse(rr(r, -120, w + 120), rr(r, -50, h * .44), rr(r, 70, 230), rr(r, 12, 40), 0, 0, 6.284);
+            g.fill();
+          }
+        }},
+        { d: .07, k: 'far', f: (g, W, Hh, r) => {
+          g.globalAlpha = .5;
+          skyline(g, w, h, h * .6, '#16222c', r, {
+            lit: .02, minH: 80, maxH: 230, minW: 30, maxW: 92,
+            winCol: 'rgba(0,0,0,.18)', litCol: 'rgba(214,168,72,.5)'
+          });
+          g.globalAlpha = 1;
+        }},
+        { d: .2, k: 'mid', f: (g, W, Hh, r) => {
+          skyline(g, w, h, h * .67, '#0b131a', r, { lit: .015, minH: 70, maxH: 190, winCol: 'rgba(0,0,0,.3)' });
+          powerLine(g, -40, h * .67, 110, '#080f14', w * .42, 3);
+        }},
+        { d: .42, k: 'fence', f: (g, W, Hh, r) => {
+          const y = h * .74;
+          g.fillStyle = '#070c0f';
+          for (let x = -PAD; x < w + PAD; x += 96) {
+            g.fillRect(x, y - 46, 88, 46);
+            g.fillRect(x + 40, y - 84, 6, 40);
+          }
+          g.strokeStyle = 'rgba(22,32,40,.85)'; g.lineWidth = 1;
+          for (let x = -PAD; x < w + PAD; x += 11) {
+            g.beginPath(); g.moveTo(x, y - 84); g.lineTo(x + 11, y - 46); g.stroke();
+            g.beginPath(); g.moveTo(x, y - 46); g.lineTo(x + 11, y - 84); g.stroke();
+          }
+          g.strokeStyle = '#0a1015'; g.lineWidth = 1.6;
+          for (let x = -PAD; x < w + PAD; x += 16) { g.beginPath(); g.arc(x, y - 88, 7, 0, Math.PI * 1.4); g.stroke(); }
+          /* вышка — правее людей, чтобы луч шёл им в спину */
+          const tx = w * .86;
+          g.fillStyle = '#060a0d';
+          g.beginPath();
+          g.moveTo(tx - 34, y); g.lineTo(tx - 15, y - 150); g.lineTo(tx + 15, y - 150); g.lineTo(tx + 34, y);
+          g.closePath(); g.fill();
+          g.fillRect(tx - 30, y - 196, 60, 48);
+          g.beginPath(); g.moveTo(tx - 38, y - 196); g.lineTo(tx, y - 218); g.lineTo(tx + 38, y - 196); g.closePath(); g.fill();
+        }},
+        { d: .75, k: 'street', f: (g, W, Hh, r) => {
+          const y = h * .82;
+          g.fillStyle = '#080b0d'; g.fillRect(-PAD, y - 4, w + PAD * 2, h);
+          for (let i = 0; i < 10; i++) {
+            const px = rr(r, -20, w + 20), py = rr(r, y + 8, h * .99), pw = rr(r, 40, 150);
+            const grd = g.createLinearGradient(0, py - 6, 0, py + 8);
+            grd.addColorStop(0, 'rgba(124,154,174,.18)');
+            grd.addColorStop(1, 'rgba(124,154,174,0)');
+            g.fillStyle = grd;
+            g.beginPath(); g.ellipse(px, py, pw, rr(r, 5, 12), 0, 0, 6.284); g.fill();
+          }
+          rubble(g, -PAD, w + PAD, y + 8, '#0a0e11', r, 26);
+          figure(g, w * .18, y, h * .3, '#04070a', { pack: true, hood: true, gun: 'back', arms: 'down', legs: [.12, -.1] });
+          figure(g, w * .262, y, h * .215, '#04070a', { slim: true, hair: true, arms: 'down', legs: [-.08, .06] });
+        }},
+        { d: 1.05, k: 'near', f: (g) => {
+          g.fillStyle = '#030507';
+          g.fillRect(w * .92, -PAD, w * .1 + PAD, h + PAD * 2);
+          const grd = g.createLinearGradient(w * .92, 0, w * .74, 0);
+          grd.addColorStop(0, 'rgba(3,5,7,.95)'); grd.addColorStop(1, 'rgba(3,5,7,0)');
+          g.fillStyle = grd; g.fillRect(w * .74, -PAD, w * .2, h + PAD * 2);
+        }}
+      ];
+    },
+    frame(g, w, h, t) {
+      const tx = w * .86, ty = h * .74 - 172;
+      const a = Math.sin(t * .19) * .62 + Math.PI * .68;
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      g.translate(tx, ty); g.rotate(a);
+      const len = h * 1.05;
+      const grd = g.createLinearGradient(0, 0, 0, len);
+      grd.addColorStop(0, 'rgba(196,214,224,.20)');
+      grd.addColorStop(.55, 'rgba(160,186,200,.07)');
+      grd.addColorStop(1, 'rgba(140,170,190,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(-len * .16, len); g.lineTo(len * .16, len); g.closePath(); g.fill();
+      g.restore();
+      glow(g, tx, ty, 46, '210,226,236', .3 + Math.sin(t * 2.4) * .04);
+    }
+  },
+
+
+  /* Коллектор под городом. Фонарь, споры, грибница на стенах. */
+  tunnel: {
+    amb: 'cave',
+    fx: { spores: 130, fog: .28, fogColor: '150,140,110', tint: '#1d2a18', tintA: .2, wind: .2 },
+    layers(w, h, rng) {
+      const cx = w * .54, cy = h * .44, floorY = h * .76;
+      return [
+        { d: 0, k: 'rings', f: (g, W, Hh, r) => {
+          /* Труба уходит вглубь: вложенные своды, каждый темнее. */
+          g.fillStyle = '#0f1310'; g.fillRect(-PAD, -PAD, w + PAD * 2, h + PAD * 2);
+          for (let i = 0; i < 11; i++) {
+            const k = 1 - i / 11;
+            const rw = w * .1 + w * .62 * k, rh = h * .06 + h * .42 * k;
+            const s = Math.round(5 + k * k * 34);
+            g.fillStyle = 'rgb(' + s + ',' + (s + 4) + ',' + (s + 1) + ')';
+            g.beginPath();
+            g.ellipse(cx, cy, rw, rh, 0, Math.PI, 0);
+            g.lineTo(cx + rw, floorY); g.lineTo(cx - rw, floorY);
+            g.closePath(); g.fill();
+            /* ребро свода: тёмная тень и светлая кромка под ней */
+            g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 3;
+            g.beginPath(); g.ellipse(cx, cy, rw, rh, 0, Math.PI, 0); g.stroke();
+            g.strokeStyle = 'rgba(190,196,170,' + (.05 + k * .08) + ')'; g.lineWidth = 1.4;
+            g.beginPath(); g.ellipse(cx, cy, rw - 4, rh - 4, 0, Math.PI, 0); g.stroke();
+          }
+          /* пол и жёлоб с водой */
+          g.fillStyle = '#080b09'; g.fillRect(-PAD, floorY, w + PAD * 2, h + PAD);
+          const grd = g.createLinearGradient(0, floorY, 0, h);
+          grd.addColorStop(0, 'rgba(80,96,68,.16)'); grd.addColorStop(1, 'rgba(80,96,68,0)');
+          g.fillStyle = grd; g.fillRect(cx - w * .22, floorY, w * .44, h - floorY + PAD);
+        }},
+        { d: .3, k: 'growth', f: (g, W, Hh, r) => {
+          for (let i = 0; i < 70; i++) {
+            const side = r() < .5 ? -1 : 1;
+            const k = rr(r, .3, 1);
+            const x = cx + side * (w * .1 + w * .55 * k) * rr(r, .6, 1.05);
+            const y = cy - (h * .05 + h * .4 * k) * rr(r, .05, 1);
+            const s = rr(r, 5, 24) * k;
+            g.fillStyle = 'rgba(' + ri(r, 92, 138) + ',' + ri(r, 96, 128) + ',' + ri(r, 52, 82) + ',' + rr(r, .12, .32) + ')';
+            g.beginPath();
+            for (let j = 0; j < 7; j++) {
+              const a = j / 7 * 6.284;
+              g.lineTo(x + Math.cos(a) * s * rr(r, .5, 1), y + Math.sin(a) * s * rr(r, .4, .9));
+            }
+            g.closePath(); g.fill();
+            if (r() < .28) glow(g, x, y, s * 2.4, '190,170,90', .07);
+          }
+          g.strokeStyle = 'rgba(150,146,104,.2)'; g.lineWidth = 1;
+          for (let i = 0; i < 46; i++) {
+            const x = rr(r, 0, w), y0 = rr(r, h * .04, h * .28), l = rr(r, 12, 76);
+            g.beginPath(); g.moveTo(x, y0); g.quadraticCurveTo(x + rr(r, -6, 6), y0 + l * .6, x + rr(r, -10, 10), y0 + l); g.stroke();
+          }
+        }},
+        { d: .6, k: 'floor', f: (g, W, Hh, r) => {
+          g.strokeStyle = '#0a0d0b'; g.lineWidth = 15;
+          g.beginPath(); g.moveTo(-PAD, h * .5); g.quadraticCurveTo(cx, h * .42, w + PAD, h * .5); g.stroke();
+          rubble(g, -PAD, w + PAD, floorY + 8, '#080b09', r, 40);
+          figure(g, w * .26, floorY + 6, h * .3, '#040605', { pack: true, hood: true, arms: 'lamp', legs: [.24, -.2] });
+          figure(g, w * .35, floorY + 8, h * .215, '#040605', { slim: true, hair: true, arms: 'reach', legs: [.1, -.06] });
+        }},
+        { d: 1.0, k: 'near', f: (g) => {
+          const grd = g.createLinearGradient(0, h + PAD, 0, h * .74);
+          grd.addColorStop(0, 'rgba(2,4,3,.94)'); grd.addColorStop(1, 'rgba(2,4,3,0)');
+          g.fillStyle = grd; g.fillRect(-PAD, h * .74, w + PAD * 2, h * .26 + PAD);
+        }}
+      ];
+    },
+    frame(g, w, h, t) {
+      const fx = w * .26 + Math.sin(t * .8) * 3, fy = h * .76 - h * .3 * .78;
+      const flick = .82 + Math.sin(t * 21) * .06 + Math.sin(t * 3.7) * .08;
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      g.translate(fx, fy);
+      g.rotate(-.1 + Math.sin(t * .5) * .05);
+      /* три вложенных конуса дают мягкий край вместо картонного клина */
+      for (const [len, spread, a] of [[.78, .3, .07], [.6, .19, .09], [.42, .1, .12]]) {
+        const grd = g.createLinearGradient(0, 0, w * len, 0);
+        grd.addColorStop(0, 'rgba(226,220,172,' + (a * flick) + ')');
+        grd.addColorStop(.45, 'rgba(196,194,146,' + (a * .45 * flick) + ')');
+        grd.addColorStop(1, 'rgba(170,178,128,0)');
+        g.fillStyle = grd;
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.lineTo(w * len, -h * spread); g.lineTo(w * len, h * spread * 1.25);
+        g.closePath(); g.fill();
+      }
+      g.restore();
+      /* пятно света на полу под лучом */
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      const pool = g.createRadialGradient(w * .52, h * .78, 4, w * .52, h * .78, w * .26);
+      pool.addColorStop(0, 'rgba(214,206,150,' + (.09 * flick) + ')');
+      pool.addColorStop(1, 'rgba(214,206,150,0)');
+      g.fillStyle = pool;
+      g.beginPath(); g.ellipse(w * .52, h * .78, w * .26, h * .05, 0, 0, 6.284); g.fill();
+      g.restore();
+      glow(g, fx, fy, 30, '226,216,160', .35 * flick);
+    }
+  },
+
+
+  /* Мост на рассвете. Туман по реке, солнце в спину. */
+  bridge_dawn: {
+    amb: 'river',
+    fx: { fog: 1, fogColor: '218,208,186', dust: 70, tint: '#e0a04a', tintA: .14, wind: .5 },
+    layers(w, h, rng) {
+      const H = h * .58, deck = h * .74;
+      return [
+        { d: 0, k: 'sky', f: (g, W, Hh, r) => {
+          skyGrad(g, w, h, [[0, '#16213a'], [.3, '#3b4258'], [.5, '#8a7359'], [.66, '#d09a54'], [.8, '#e8b96a'], [1, '#b98c50']]);
+          glow(g, w * .3, H - 14, h * .42, '255,214,140', .55);
+          g.fillStyle = 'rgba(255,232,180,.85)';
+          g.beginPath(); g.arc(w * .3, H - 14, h * .045, 0, 6.284); g.fill();
+          for (let i = 0; i < 16; i++) {
+            g.fillStyle = 'rgba(' + ri(r, 40, 90) + ',' + ri(r, 44, 80) + ',' + ri(r, 56, 92) + ',' + rr(r, .16, .45) + ')';
+            g.beginPath();
+            g.ellipse(rr(r, -100, w + 100), rr(r, h * .06, h * .46), rr(r, 90, 300), rr(r, 4, 13), 0, 0, 6.284);
+            g.fill();
+          }
+          birds(g, w * .6, h * .2, 7, 'rgba(30,34,44,.5)', r);
+        }},
+        { d: .09, k: 'hills', f: (g, W, Hh, r) => {
+          ridge(g, w, h, H - 30, 36, 'rgba(52,56,68,.8)', r);
+          ridge(g, w, h, H - 10, 24, 'rgba(38,42,52,.9)', r);
+        }},
+        { d: .2, k: 'water', f: (g, W, Hh, r) => {
+          const grd = g.createLinearGradient(0, H, 0, h);
+          grd.addColorStop(0, '#7d6a4e'); grd.addColorStop(.35, '#4a4740'); grd.addColorStop(1, '#22252a');
+          g.fillStyle = grd; g.fillRect(-PAD, H, w + PAD * 2, h + PAD);
+          for (let i = 0; i < 70; i++) {
+            const y = rr(r, H + 2, h);
+            const k = (y - H) / (h - H);
+            g.fillStyle = 'rgba(255,214,150,' + (.28 * (1 - k)) + ')';
+            g.fillRect(w * .3 - rr(r, 5, 60) * (1 + k * 4), y, rr(r, 8, 70) * (1 + k * 2), 1.4);
+          }
+        }},
+        { d: .4, k: 'bridge', f: (g, W, Hh, r) => {
+          /* Ферма сужается вправо — так пролёт уходит вдаль. */
+          const col = 'rgba(24,26,30,.95)';
+          g.fillStyle = col;
+          g.fillRect(-PAD, deck, w + PAD * 2, 14);
+          let x = -PAD;
+          let span = w * .42, hgt = h * .34;
+          const tops = [];
+          while (x < w + PAD) {
+            g.strokeStyle = col; g.lineWidth = Math.max(1.6, 4.4 * (span / (w * .42)));
+            g.beginPath(); g.moveTo(x, deck); g.lineTo(x, deck - hgt); g.stroke();
+            tops.push([x, deck - hgt]);
+            g.lineWidth = Math.max(1.1, 2.6 * (span / (w * .42)));
+            g.beginPath(); g.moveTo(x, deck); g.lineTo(x + span, deck - hgt * .82); g.stroke();
+            g.beginPath(); g.moveTo(x + span, deck); g.lineTo(x, deck - hgt); g.stroke();
+            x += span; span *= .7; hgt *= .82;
+          }
+          g.strokeStyle = col; g.lineWidth = 4;
+          g.beginPath();
+          tops.forEach(([tx, ty], i) => i ? g.lineTo(tx, ty) : g.moveTo(tx, ty));
+          g.stroke();
+          g.clearRect(w * .52, deck - 2, w * .07, 20);
+          g.fillStyle = col;
+          g.fillRect(w * .12, deck + 12, 24, h);
+          g.fillRect(w * .58, deck + 12, 16, h);
+        }},
+        { d: .8, k: 'deck', f: (g, W, Hh, r) => {
+          rubble(g, -PAD, w + PAD, deck + 12, 'rgba(18,20,22,.9)', r, 22);
+          grassRow(g, -PAD, w + PAD, deck + 14, 16, 'rgba(30,36,28,.8)', r, 70);
+          figure(g, w * .82, deck + 14, h * .3, '#0d0f12', { pack: true, gun: 'back', arms: 'down', legs: [.16, -.14], flip: true });
+          figure(g, w * .735, deck + 14, h * .215, '#0d0f12', { slim: true, hair: true, arms: 'reach', legs: [.05, -.05] });
+        }},
+        { d: 1.1, k: 'near', f: (g) => {
+          const grd = g.createLinearGradient(0, h + PAD, 0, h * .72);
+          grd.addColorStop(0, 'rgba(8,9,10,.9)'); grd.addColorStop(1, 'rgba(8,9,10,0)');
+          g.fillStyle = grd; g.fillRect(-PAD, h * .72, w + PAD * 2, h * .28 + PAD);
+        }}
+      ];
+    },
+    frame(g, w, h, t) {
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 12; i++) {
+        const y = h * .6 + i * (h * .13 / 12);
+        const a = .05 + .05 * Math.sin(t * 1.1 + i * .8);
+        g.fillStyle = 'rgba(255,214,150,' + a + ')';
+        g.fillRect(w * .3 - 40 - i * 9 + Math.sin(t + i) * 8, y, 80 + i * 18, 1.6);
+      }
+      g.restore();
+    }
+  }
+
+};
+
+Object.assign(SCENES, {
+
+  /* Заросшее шоссе. Пасмурный день, остовы машин, лес наступает. */
+  highway: {
+    amb: 'wind',
+    fx: { dust: 80, fog: .55, fogColor: '196,202,190', tint: '#8ea88a', tintA: .16, wind: .9 },
+    layers(w, h, rng) {
+      const H = h * .54;
+      return [
+        { d: 0, k: 'sky', f: (g, W, Hh, r) => {
+          skyGrad(g, w, h, [[0, '#93a0a4'], [.4, '#aab3b0'], [.62, '#c2c6b8'], [1, '#9aa294']]);
+          for (let i = 0; i < 20; i++) {
+            g.fillStyle = 'rgba(126,138,138,' + rr(r, .07, .2) + ')';
+            g.beginPath();
+            g.ellipse(rr(r, -120, w + 120), rr(r, -30, h * .38), rr(r, 110, 300), rr(r, 14, 44), 0, 0, 6.284);
+            g.fill();
+          }
+          birds(g, w * .22, h * .16, 5, 'rgba(60,66,64,.4)', r);
+        }},
+        { d: .08, k: 'far', f: (g, W, Hh, r) => {
+          ridge(g, w, h, H - 18, 28, 'rgba(122,134,126,.65)', r);
+          g.globalAlpha = .5; treeRow(g, w, H + 6, '#5c6a58', r, { n: 26, min: 40, max: 92, dead: .18, pine: .55 }); g.globalAlpha = 1;
+        }},
+        { d: .22, k: 'trees', f: (g, W, Hh, r) => {
+          treeRow(g, w, H + 26, '#33402f', r, { n: 20, min: 80, max: 190, dead: .28, pine: .45 });
+        }},
+        { d: .45, k: 'road', f: (g, W, Hh, r) => {
+          const vx = w * .5, vy = H + 22;
+          g.fillStyle = '#3a3d3a';
+          g.beginPath();
+          g.moveTo(vx - 20, vy); g.lineTo(vx + 20, vy);
+          g.lineTo(w * 1.2, h + PAD); g.lineTo(-w * .2, h + PAD);
+          g.closePath(); g.fill();
+          g.fillStyle = 'rgba(190,186,160,.26)';
+          for (let i = 0; i < 16; i++) {
+            const k = Math.pow(i / 16, 2.1);
+            const y = lerp(vy, h + 40, k);
+            const wdt = lerp(2, 24, k);
+            g.fillRect(vx - wdt / 2, y, wdt, lerp(2, 26, k));
+          }
+          g.strokeStyle = 'rgba(20,24,20,.45)';
+          for (let i = 0; i < 26; i++) {
+            const k = rr(r, .2, 1);
+            const y = lerp(vy, h + 30, k * k);
+            const x = rr(r, vx - w * .8 * k, vx + w * .8 * k);
+            g.lineWidth = .6 + k * 1.6;
+            g.beginPath(); g.moveTo(x, y);
+            g.lineTo(x + rr(r, -40, 40) * k, y + rr(r, -14, 22) * k); g.stroke();
+          }
+          for (let i = 0; i < 8; i++) {
+            const k = rr(r, .35, 1);
+            grassRow(g, vx - w * .8 * k, vx + w * .8 * k, lerp(vy, h + 20, k * k), 6 + k * 22, 'rgba(58,74,48,.8)', r, 22);
+          }
+        }},
+        { d: .62, k: 'cars', f: (g, W, Hh, r) => {
+          const vy = H + 22;
+          const spots = [[.68, .5], [.86, .66], [.22, .38], [.78, .86], [.44, .3]];
+          for (const [sx, k] of spots) {
+            const y = lerp(vy, h + 10, k * k);
+            const s = lerp(.1, .95, k);
+            carHusk(g, w * sx, y, s, 'rgba(28,34,30,.95)', r);
+            grassRow(g, w * sx - 60 * s, w * sx + 60 * s, y + 2, 14 * s, 'rgba(52,68,44,.85)', r, 18);
+          }
+        }},
+        { d: .85, k: 'near', f: (g, W, Hh, r) => {
+          figure(g, w * .2, h * .8, h * .28, 'rgba(16,20,18,.96)', { pack: true, gun: 'back', arms: 'down', legs: [.2, -.18] });
+          figure(g, w * .275, h * .795, h * .2, 'rgba(16,20,18,.96)', { slim: true, hair: true, arms: 'down', legs: [-.12, .1] });
+          grassRow(g, -PAD, w * .12, h + 6, 90, 'rgba(34,44,30,.95)', r, 60);
+          grassRow(g, w * .88, w + PAD, h + 6, 100, 'rgba(34,44,30,.95)', r, 60);
+        }}
+      ];
+    }
+  },
+
+
+  /* Атриум торгового центра. Свет падает сквозь дыры в кровле. */
+  mall: {
+    amb: 'cave',
+    fx: { dust: 150, fog: .28, fogColor: '220,206,160', tint: '#d8bf7a', tintA: .12, wind: .3 },
+    layers(w, h, rng) {
+      const floorY = h * .78;
+      return [
+        { d: 0, k: 'back', f: (g, W, Hh, r) => {
+          skyGrad(g, w, h, [[0, '#151711'], [.45, '#1e2118'], [1, '#0b0d0a']]);
+          /* витрины дальней стены: разной ширины, часть выбита */
+          let x = -PAD;
+          while (x < w + PAD) {
+            const bw = rr(r, 70, 150);
+            g.fillStyle = 'rgba(6,8,6,.85)';
+            g.fillRect(x, h * .44, bw, h * .2);
+            g.fillStyle = 'rgba(34,38,28,.45)';
+            g.fillRect(x, h * .405, bw, 11);
+            if (r() < .45) {
+              g.fillStyle = 'rgba(120,126,96,.10)';
+              g.fillRect(x + 6, h * .45, bw - 12, h * .12);
+            }
+            x += bw + rr(r, 8, 26);
+          }
+        }},
+        { d: .12, k: 'roof', f: (g, W, Hh, r) => {
+          g.fillStyle = '#0a0c09';
+          g.fillRect(-PAD, -PAD, w + PAD * 2, h * .18 + PAD);
+          g.strokeStyle = '#0a0c09'; g.lineWidth = 7;
+          for (let i = 0; i < 7; i++) {
+            const x = -PAD + i * ((w + PAD * 2) / 6);
+            g.beginPath(); g.moveTo(x, h * .18); g.lineTo(x + 40, -PAD); g.stroke();
+          }
+          g.lineWidth = 5;
+          for (let i = 0; i < 4; i++) {
+            g.beginPath(); g.moveTo(-PAD, h * (.04 + i * .04)); g.lineTo(w + PAD, h * (.02 + i * .045)); g.stroke();
+          }
+          g.fillStyle = '#0a0c09';
+          for (const [sx, sw] of [[.2, .1], [.5, .07], [.78, .08]]) {
+            g.beginPath();
+            g.moveTo(w * (sx - sw), h * .18);
+            for (let i = 0; i <= 8; i++) g.lineTo(w * (sx - sw + i * sw * 2 / 8), h * (.18 - rr(r, .01, .05)));
+            g.lineTo(w * (sx + sw), h * .18); g.closePath(); g.fill();
+          }
+        }},
+        { d: .3, k: 'balcony', f: (g, W, Hh, r) => {
+          const y = h * .5;
+          g.fillStyle = 'rgba(10,12,9,.95)';
+          g.fillRect(-PAD, y, w + PAD * 2, 12);
+          g.strokeStyle = 'rgba(10,12,9,.9)'; g.lineWidth = 2;
+          for (let x = -PAD; x < w + PAD; x += 15) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - 30); g.stroke(); }
+          g.lineWidth = 4;
+          g.beginPath(); g.moveTo(-PAD, y - 30); g.lineTo(w + PAD, y - 30); g.stroke();
+          g.fillStyle = 'rgba(8,10,8,.95)';
+          g.beginPath();
+          g.moveTo(w * .62, y + 12); g.lineTo(w * .92, floorY); g.lineTo(w * .99, floorY); g.lineTo(w * .69, y + 12);
+          g.closePath(); g.fill();
+          g.strokeStyle = 'rgba(44,62,34,.6)'; g.lineWidth = 2;
+          for (let i = 0; i < 26; i++) {
+            const x = rr(r, -PAD, w + PAD), l = rr(r, 30, h * .26);
+            g.beginPath(); g.moveTo(x, y + 8); g.quadraticCurveTo(x + rr(r, -10, 10), y + l * .6, x + rr(r, -18, 18), y + l); g.stroke();
+          }
+        }},
+        { d: .6, k: 'floor', f: (g, W, Hh, r) => {
+          g.fillStyle = '#0c0f0c'; g.fillRect(-PAD, floorY, w + PAD * 2, h + PAD);
+          const grd = g.createLinearGradient(0, floorY, 0, h + PAD);
+          grd.addColorStop(0, 'rgba(150,150,110,.22)');
+          grd.addColorStop(.5, 'rgba(90,96,70,.08)');
+          grd.addColorStop(1, 'rgba(60,66,50,.02)');
+          g.fillStyle = grd; g.fillRect(-PAD, floorY, w + PAD * 2, h - floorY + PAD);
+          rubble(g, -PAD, w + PAD, floorY + 4, '#080a08', r, 46);
+          for (let i = 0; i < 6; i++) broadleaf(g, rr(r, w * .4, w), floorY + rr(r, 0, 18), rr(r, 40, 110), 'rgba(38,54,32,.9)', r);
+          grassRow(g, -PAD, w + PAD, floorY + 10, 24, 'rgba(46,62,38,.85)', r, 80);
+          figure(g, w * .17, floorY + 12, h * .3, '#050705', { pack: true, gun: 'aim', arms: 'aim', crouch: true, legs: [.3, -.25] });
+          figure(g, w * .085, floorY + 12, h * .21, '#050705', { slim: true, hair: true, crouch: true, arms: 'down', legs: [.14, -.12] });
+        }},
+        { d: 1.0, k: 'near', f: (g, W, Hh, r) => {
+          g.fillStyle = 'rgba(3,5,3,.9)';
+          g.beginPath();
+          g.moveTo(w + PAD, h + PAD); g.lineTo(w + PAD, h * .26);
+          g.lineTo(w * .88, h * .52); g.lineTo(w * .92, h + PAD);
+          g.closePath(); g.fill();
+        }}
+      ];
+    },
+    frame(g, w, h, t) {
+      /* Столбы света из дыр в кровле: главный герой этого кадра. */
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      const shafts = [[.2, .1], [.5, .07], [.78, .08]];
+      shafts.forEach(([sx, sw], i) => {
+        const a = .14 + .03 * Math.sin(t * .5 + i * 2);
+        const grd = g.createLinearGradient(0, h * .1, 0, h * .82);
+        grd.addColorStop(0, 'rgba(238,224,170,' + a + ')');
+        grd.addColorStop(.7, 'rgba(220,206,150,' + a * .35 + ')');
+        grd.addColorStop(1, 'rgba(200,190,140,0)');
+        g.fillStyle = grd;
+        g.beginPath();
+        g.moveTo(w * (sx - sw), h * .1);
+        g.lineTo(w * (sx + sw), h * .1);
+        g.lineTo(w * (sx + sw * 1.9), h * .82);
+        g.lineTo(w * (sx - sw * 1.9), h * .82);
+        g.closePath(); g.fill();
+        g.fillStyle = 'rgba(238,224,170,' + a * .45 + ')';
+        g.beginPath(); g.ellipse(w * sx, h * .8, w * sw * 1.7, h * .022, 0, 0, 6.284); g.fill();
+      });
+      g.restore();
+    }
+  },
+
+
+  /* Деревня зимой. Один живой огонёк на весь мир. */
+  village_snow: {
+    amb: 'snow',
+    fx: { snow: 300, fog: .5, fogColor: '222,230,238', tint: '#4e6a90', tintA: .2, wind: .7 },
+    layers(w, h, rng) {
+      const H = h * .6;
+      return [
+        { d: 0, k: 'sky', f: (g, W, Hh, r) => {
+          skyGrad(g, w, h, [[0, '#131a2c'], [.34, '#26314a'], [.6, '#4a5064'], [.78, '#7a7382'], [1, '#3f4351']]);
+          for (let i = 0; i < 80; i++) {
+            g.fillStyle = 'rgba(220,228,240,' + rr(r, .05, .28) + ')';
+            g.beginPath(); g.arc(rr(r, 0, w), rr(r, 0, h * .34), rr(r, .3, 1), 0, 6.284); g.fill();
+          }
+          for (let i = 0; i < 14; i++) {
+            g.fillStyle = 'rgba(30,36,52,' + rr(r, .18, .45) + ')';
+            g.beginPath();
+            g.ellipse(rr(r, -100, w + 100), rr(r, h * .08, h * .42), rr(r, 90, 260), rr(r, 10, 30), 0, 0, 6.284);
+            g.fill();
+          }
+        }},
+        { d: .1, k: 'forest', f: (g, W, Hh, r) => {
+          g.globalAlpha = .5; treeRow(g, w, H - 6, '#232c3a', r, { n: 34, min: 50, max: 130, pine: .85, dead: .1 }); g.globalAlpha = 1;
+        }},
+        { d: .26, k: 'houses', f: (g, W, Hh, r) => {
+          treeRow(g, w, H + 14, '#141b24', r, { n: 12, min: 90, max: 200, pine: .8, dead: .15 });
+          const spots = [[.14, .82], [.36, 1.05], [.58, .88], [.8, .72]];
+          spots.forEach(([sx, sc], i) => {
+            const x = w * sx, y = H + 40, ww = 116 * sc, hh = 74 * sc;
+            g.fillStyle = '#0d1219';
+            g.fillRect(x - ww / 2, y - hh, ww, hh);
+            g.beginPath();
+            g.moveTo(x - ww / 2 - 10, y - hh); g.lineTo(x, y - hh - 44 * sc); g.lineTo(x + ww / 2 + 10, y - hh);
+            g.closePath(); g.fill();
+            g.fillStyle = 'rgba(228,236,244,.8)';
+            g.beginPath();
+            g.moveTo(x - ww / 2 - 10, y - hh); g.lineTo(x, y - hh - 44 * sc); g.lineTo(x + ww / 2 + 10, y - hh);
+            g.lineTo(x + ww / 2 + 4, y - hh + 5); g.lineTo(x, y - hh - 34 * sc); g.lineTo(x - ww / 2 - 4, y - hh + 5);
+            g.closePath(); g.fill();
+            g.fillStyle = '#0d1219';
+            g.fillRect(x + ww * .22, y - hh - 40 * sc, 12 * sc, 30 * sc);
+            if (i === 1) {
+              g.fillStyle = 'rgba(226,168,74,.9)';
+              g.fillRect(x - 16 * sc, y - hh * .68, 22 * sc, 20 * sc);
+              glow(g, x - 5 * sc, y - hh * .6, 100 * sc, '226,168,74', .2);
+            } else {
+              g.fillStyle = 'rgba(4,6,10,.9)';
+              g.fillRect(x - 16 * sc, y - hh * .68, 22 * sc, 20 * sc);
+            }
+          });
+        }},
+        { d: .55, k: 'snow', f: (g, W, Hh, r) => {
+          const y = H + 40;
+          for (let k = 0; k < 3; k++) {
+            g.fillStyle = ['rgba(206,216,228,.9)', 'rgba(224,232,242,.95)', 'rgba(238,244,250,1)'][k];
+            g.beginPath();
+            g.moveTo(-PAD, h + PAD);
+            const yy = y + k * (h - y) * .28;
+            g.lineTo(-PAD, yy);
+            for (let x = -PAD; x < w + PAD; x += 40) {
+              g.quadraticCurveTo(x + 20, yy + Math.sin(x * .02 + k) * 10 - 8, x + 40, yy + Math.sin(x * .015 + k * 2) * 8);
+            }
+            g.lineTo(w + PAD, h + PAD); g.closePath(); g.fill();
+          }
+          g.fillStyle = 'rgba(28,34,42,.9)';
+          for (let x = -PAD; x < w + PAD; x += 26) {
+            if (r() < .3) continue;
+            g.fillRect(x, h * .8 - rr(r, 26, 48), 7, 54);
+          }
+        }},
+        { d: .85, k: 'near', f: (g, W, Hh, r) => {
+          figure(g, w * .835, h * .845, h * .26, 'rgba(12,16,22,.96)', { pack: true, hood: true, gun: 'back', arms: 'down', legs: [.24, -.2] });
+          figure(g, w * .912, h * .85, h * .19, 'rgba(12,16,22,.96)', { slim: true, hood: true, arms: 'down', legs: [-.16, .14] });
+        }}
+      ];
+    },
+    frame(g, w, h, t) {
+      /* дым из трубы живой избы */
+      g.save();
+      const x0 = w * .36 + 116 * 1.05 * .22, y0 = h * .6 + 40 - 74 * 1.05 - 40 * 1.05;
+      for (let i = 0; i < 7; i++) {
+        const k = ((t * .09 + i / 7) % 1);
+        const yy = y0 - k * h * .3;
+        const a = (1 - k) * (1 - k) * .1;
+        g.fillStyle = 'rgba(210,218,228,' + a + ')';
+        g.beginPath();
+        g.ellipse(x0 + Math.sin(k * 3.4 + i) * 34 * k, yy, 12 + k * 66, 9 + k * 40, 0, 0, 6.284);
+        g.fill();
+      }
+      g.restore();
+    }
+  }
+
+});
+
+Object.assign(SCENES, {
+
+  /* Плотина на закате. Бетон, вода и последний свет. */
+  dam_sunset: {
+    amb: 'river',
+    fx: { ash: 90, fog: .45, fogColor: '236,196,150', tint: '#e08a3a', tintA: .2, wind: 1 },
+    layers(w, h, rng) {
+      const H = h * .44, top = h * .5, bot = h * .74;
+      return [
+        { d: 0, k: 'sky', f: (g, W, Hh, r) => {
+          skyGrad(g, w, h, [[0, '#2b2440'], [.2, '#5c3a4c'], [.36, '#9e5540'], [.5, '#d4813a'], [.64, '#efb95e'], [.78, '#f3d38a'], [1, '#c98c4e']]);
+          glow(g, w * .68, H - 4, h * .5, '255,206,120', .5);
+          g.fillStyle = 'rgba(255,232,178,.92)';
+          g.beginPath(); g.arc(w * .68, H - 4, h * .052, 0, 6.284); g.fill();
+          for (let i = 0; i < 20; i++) {
+            g.fillStyle = 'rgba(' + ri(r, 50, 110) + ',' + ri(r, 34, 60) + ',' + ri(r, 48, 76) + ',' + rr(r, .18, .5) + ')';
+            g.beginPath();
+            g.ellipse(rr(r, -120, w + 120), rr(r, h * .05, h * .4), rr(r, 110, 320), rr(r, 5, 15), 0, 0, 6.284);
+            g.fill();
+          }
+          birds(g, w * .3, h * .17, 9, 'rgba(40,28,34,.5)', r);
+        }},
+        { d: .08, k: 'hills', f: (g, W, Hh, r) => {
+          ridge(g, w, h, H + 4, 42, 'rgba(64,44,50,.9)', r);
+          g.globalAlpha = .5; treeRow(g, w, H + 26, '#2e2430', r, { n: 22, min: 26, max: 62, pine: .8 }); g.globalAlpha = 1;
+        }},
+        { d: .22, k: 'dam', f: (g, W, Hh, r) => {
+          g.fillStyle = '#221c1e';
+          g.beginPath();
+          g.moveTo(-PAD, top); g.lineTo(w + PAD, top - 8);
+          g.lineTo(w + PAD, bot + 26); g.lineTo(-PAD, bot);
+          g.closePath(); g.fill();
+          g.fillStyle = 'rgba(14,11,12,.5)';
+          for (let x = -PAD; x < w + PAD; x += 92) g.fillRect(x, top, 16, bot - top + 24);
+          for (const sx of [.22, .52, .82]) {
+            const x = w * sx;
+            const grd = g.createLinearGradient(0, top, 0, bot + 30);
+            grd.addColorStop(0, 'rgba(244,226,196,.6)');
+            grd.addColorStop(.6, 'rgba(226,200,168,.3)');
+            grd.addColorStop(1, 'rgba(220,196,164,.04)');
+            g.fillStyle = grd;
+            g.beginPath();
+            g.moveTo(x - 20, top); g.lineTo(x + 20, top);
+            g.lineTo(x + 36, bot + 30); g.lineTo(x - 36, bot + 30);
+            g.closePath(); g.fill();
+          }
+          g.fillStyle = '#191315';
+          g.fillRect(-PAD, top - 13, w + PAD * 2, 15);
+          g.strokeStyle = '#191315'; g.lineWidth = 3;
+          for (let x = -PAD + 30; x < w + PAD; x += 130) {
+            g.beginPath(); g.moveTo(x, top - 13); g.lineTo(x, top - 54); g.stroke();
+            g.beginPath(); g.moveTo(x - 9, top - 54); g.lineTo(x + 9, top - 54); g.stroke();
+          }
+          /* машинный зал — справа, чтобы не спорить с людьми слева */
+          const mx = w * .72;
+          g.fillStyle = '#171213';
+          g.fillRect(mx, top - 74, 132, 61);
+          g.beginPath(); g.moveTo(mx - 8, top - 74); g.lineTo(mx + 66, top - 94); g.lineTo(mx + 140, top - 74); g.closePath(); g.fill();
+          g.fillStyle = 'rgba(226,168,74,.85)';
+          g.fillRect(mx + 22, top - 60, 16, 14);
+          g.fillRect(mx + 56, top - 60, 16, 14);
+          glow(g, mx + 47, top - 53, 120, '226,168,74', .16);
+        }},
+        { d: .5, k: 'water', f: (g, W, Hh, r) => {
+          const y = h * .78;
+          const grd = g.createLinearGradient(0, y - 22, 0, h + PAD);
+          grd.addColorStop(0, '#6d5240'); grd.addColorStop(.4, '#3d3330'); grd.addColorStop(1, '#1b1a1c');
+          g.fillStyle = grd; g.fillRect(-PAD, y - 22, w + PAD * 2, h + PAD);
+          for (let i = 0; i < 60; i++) {
+            const yy = rr(r, y - 14, h + 20);
+            const k = (yy - y + 22) / (h - y + 40);
+            g.fillStyle = 'rgba(255,206,140,' + (.22 * (1 - k)) + ')';
+            g.fillRect(w * .68 - rr(r, 10, 90) * (1 + k * 3), yy, rr(r, 14, 90), 1.5);
+          }
+        }},
+        { d: .9, k: 'near', f: (g, W, Hh, r) => {
+          const deck = h * .86;
+          g.fillStyle = '#0f0c0d';
+          g.fillRect(-PAD, deck, w + PAD * 2, h);
+          g.strokeStyle = '#0f0c0d'; g.lineWidth = 5;
+          g.beginPath(); g.moveTo(-PAD, deck - 66); g.lineTo(w + PAD, deck - 66); g.stroke();
+          g.lineWidth = 4;
+          for (let x = -PAD; x < w + PAD; x += 68) { g.beginPath(); g.moveTo(x, deck - 66); g.lineTo(x, deck); g.stroke(); }
+          figure(g, w * .17, deck, h * .3, '#0b0809', { pack: true, arms: 'down', legs: [.05, -.05] });
+          figure(g, w * .253, deck, h * .215, '#0b0809', { slim: true, hair: true, arms: 'reach', legs: [0, 0] });
+        }}
+      ];
+    },
+    frame(g, w, h, t) {
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 12; i++) {
+        const y = h * .79 + i * (h * .07 / 12);
+        const a = .05 + .05 * Math.sin(t * 1.3 + i);
+        g.fillStyle = 'rgba(255,206,140,' + a + ')';
+        g.fillRect(w * .68 - 50 - i * 11 + Math.sin(t * .8 + i) * 9, y, 100 + i * 22, 1.6);
+      }
+      g.restore();
+    }
+  },
+
+
+  /* Привал. Костёр, темнота вокруг и два человека. */
+  campfire: {
+    amb: 'wind',
+    fx: { embers: 110, tint: '#e08a3a', tintA: .16, wind: .4 },
+    layers(w, h, rng) {
+      const ground = h * .62, fireX = w * .3, fireY = h * .68;
+      return [
+        { d: 0, k: 'sky', f: (g, W, Hh, r) => {
+          skyGrad(g, w, h, [[0, '#05070e'], [.45, '#0a0f1a'], [.75, '#101622'], [1, '#080b0e']]);
+          for (let i = 0; i < 220; i++) {
+            const y = rr(r, 0, h * .58);
+            g.fillStyle = 'rgba(216,226,246,' + rr(r, .1, .8) * (1 - y / h) + ')';
+            g.beginPath(); g.arc(rr(r, 0, w), y, rr(r, .3, 1.3), 0, 6.284); g.fill();
+          }
+          g.save();
+          g.translate(w * .55, h * .2); g.rotate(-.4);
+          for (let i = 0; i < 140; i++) {
+            g.fillStyle = 'rgba(200,212,240,' + rr(r, .04, .2) + ')';
+            g.beginPath(); g.arc(rr(r, -w * .6, w * .6), rr(r, -34, 34), rr(r, .4, 1.5), 0, 6.284); g.fill();
+          }
+          g.restore();
+        }},
+        { d: .12, k: 'trees', f: (g, W, Hh, r) => {
+          treeRow(g, w, ground, '#05080a', r, { n: 26, min: 110, max: 260, pine: .7, dead: .25 });
+        }},
+        { d: .5, k: 'ground', f: (g, W, Hh, r) => {
+          g.fillStyle = '#080a09'; g.fillRect(-PAD, ground, w + PAD * 2, h + PAD);
+          const grd = g.createRadialGradient(fireX, fireY, 10, fireX, fireY, w * .42);
+          grd.addColorStop(0, 'rgba(226,140,50,.38)');
+          grd.addColorStop(.45, 'rgba(180,100,40,.13)');
+          grd.addColorStop(1, 'rgba(140,80,30,0)');
+          g.fillStyle = grd; g.fillRect(-PAD, -PAD, w + PAD * 2, h + PAD * 2);
+          rubble(g, -PAD, w + PAD, ground + 20, '#0b0d0c', r, 30);
+          g.fillStyle = '#141210';
+          for (let i = 0; i < 10; i++) {
+            const a = i / 10 * 6.284;
+            g.beginPath();
+            g.ellipse(fireX + Math.cos(a) * 58, fireY + Math.sin(a) * 18, rr(r, 7, 13), rr(r, 5, 8), 0, 0, 6.284);
+            g.fill();
+          }
+          g.strokeStyle = '#1a1512'; g.lineWidth = 9; g.lineCap = 'round';
+          g.beginPath(); g.moveTo(fireX - 26, fireY + 6); g.lineTo(fireX + 30, fireY - 16); g.stroke();
+          g.beginPath(); g.moveTo(fireX - 30, fireY - 14); g.lineTo(fireX + 28, fireY + 6); g.stroke();
+        }},
+        { d: .8, k: 'people', f: (g, W, Hh, r) => {
+          figure(g, w * .15, fireY + 24, h * .3, '#0a0806', { sit: true, arms: 'sit' });
+          figure(g, w * .46, fireY + 24, h * .225, '#0a0806', { slim: true, hair: true, sit: true, flip: true });
+        }}
+      ];
+    },
+    frame(g, w, h, t) {
+      /* Пламя: три языка на синусах и общий трепет света. */
+      const fx = w * .3, fy = h * .68;
+      const flick = .8 + Math.sin(t * 9) * .1 + Math.sin(t * 23) * .06;
+      glow(g, fx, fy - 16, 230 * flick, '240,150,60', .3);
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 3; i++) {
+        const ph = t * (5 + i * 1.7) + i * 2;
+        const hgt = (36 + Math.sin(ph) * 12) * (1 + i * .25) * flick;
+        const off = Math.sin(ph * .7) * 7;
+        const grd = g.createLinearGradient(0, fy, 0, fy - hgt);
+        grd.addColorStop(0, 'rgba(255,196,90,.55)');
+        grd.addColorStop(.5, 'rgba(240,140,50,.3)');
+        grd.addColorStop(1, 'rgba(200,90,30,0)');
+        g.fillStyle = grd;
+        g.beginPath();
+        g.moveTo(fx - 20 + i * 3, fy);
+        g.quadraticCurveTo(fx - 12 + off, fy - hgt * .6, fx + off * .4, fy - hgt);
+        g.quadraticCurveTo(fx + 14 + off, fy - hgt * .55, fx + 20 - i * 3, fy);
+        g.closePath(); g.fill();
+      }
+      g.restore();
+      g.fillStyle = 'rgba(255,170,70,' + (.5 * flick) + ')';
+      g.beginPath(); g.ellipse(fx, fy + 2, 24, 6, 0, 0, 6.284); g.fill();
+    }
+  },
+
+
+  /* Комната наверху. Лампа, доски на окне, чужой дом. */
+  interior: {
+    amb: 'room',
+    fx: { dust: 120, tint: '#c9a227', tintA: .14, wind: .2 },
+    layers(w, h, rng) {
+      const floorY = h * .82;
+      return [
+        { d: 0, k: 'wall', f: (g, W, Hh, r) => {
+          skyGrad(g, w, h, [[0, '#191712'], [.5, '#221e17'], [1, '#12100c']]);
+          /* обои сходят пластами — крупно и почти незаметно */
+          for (let i = 0; i < 26; i++) {
+            g.fillStyle = 'rgba(' + ri(r, 44, 66) + ',' + ri(r, 40, 58) + ',' + ri(r, 30, 44) + ',' + rr(r, .05, .12) + ')';
+            g.beginPath();
+            const x = rr(r, 0, w), y = rr(r, 0, floorY);
+            for (let j = 0; j < 7; j++) {
+              const a = j / 7 * 6.284, s = rr(r, 30, 90);
+              g.lineTo(x + Math.cos(a) * s, y + Math.sin(a) * s * .6);
+            }
+            g.closePath(); g.fill();
+          }
+          g.fillStyle = 'rgba(10,9,7,.5)';
+          g.fillRect(-PAD, h * .58, w + PAD * 2, 4);
+          g.fillStyle = '#100e0a'; g.fillRect(-PAD, floorY, w + PAD * 2, h + PAD);
+          g.fillStyle = 'rgba(6,5,4,.8)'; g.fillRect(-PAD, floorY - 9, w + PAD * 2, 9);
+        }},
+        { d: .1, k: 'window', f: (g, W, Hh, r) => {
+          const x = w * .58, y = h * .16, ww = w * .3, hh = h * .4;
+          g.fillStyle = '#0c0a08';
+          g.fillRect(x - 10, y - 10, ww + 20, hh + 20);
+          /* за досками — светлые щели: улица ещё есть */
+          g.fillStyle = 'rgba(206,200,164,.3)';
+          g.fillRect(x, y, ww, hh);
+          g.fillStyle = '#15120d';
+          for (let i = 0; i < 7; i++) {
+            g.save();
+            g.translate(x + ww / 2, y + hh * (i + .5) / 7);
+            g.rotate(rr(r, -.035, .035));
+            g.fillRect(-ww * .6, -hh * .055, ww * 1.2, hh * .096);
+            g.restore();
+          }
+          g.fillStyle = '#15120d';
+          g.fillRect(x + ww * .46, y, 12, hh);
+          /* свет ложится на пол косой полосой */
+          const grd = g.createLinearGradient(x, y + hh, x - ww * .5, floorY);
+          grd.addColorStop(0, 'rgba(226,214,164,.12)');
+          grd.addColorStop(1, 'rgba(226,214,164,0)');
+          g.fillStyle = grd;
+          g.beginPath();
+          g.moveTo(x, y + hh); g.lineTo(x + ww, y + hh);
+          g.lineTo(x + ww * .5, floorY + 30); g.lineTo(x - ww * .5, floorY + 30);
+          g.closePath(); g.fill();
+        }},
+        { d: .35, k: 'stuff', f: (g, W, Hh, r) => {
+          /* полка с банками */
+          g.fillStyle = '#0d0b08';
+          g.fillRect(w * .04, h * .36, w * .22, 8);
+          for (let i = 0; i < 6; i++) {
+            g.fillStyle = 'rgba(' + ri(r, 34, 62) + ',' + ri(r, 30, 54) + ',' + ri(r, 22, 40) + ',.95)';
+            g.fillRect(w * .05 + i * (w * .034), h * .36 - rr(r, 16, 28), w * .024, 28);
+          }
+          /* стол */
+          const ty = floorY, tx0 = w * .06, tw = w * .3;
+          g.fillStyle = '#191309';
+          g.fillRect(tx0, ty - 104, tw, 14);
+          g.fillStyle = '#120e07';
+          g.fillRect(tx0 + 12, ty - 90, 12, 90);
+          g.fillRect(tx0 + tw - 24, ty - 90, 12, 90);
+          /* керосиновая лампа: основание, стекло, пламя */
+          const lx = tx0 + tw * .46, ly = ty - 104;
+          g.fillStyle = '#2c2416';
+          g.beginPath();
+          g.moveTo(lx - 15, ly); g.lineTo(lx + 15, ly); g.lineTo(lx + 9, ly - 16); g.lineTo(lx - 9, ly - 16);
+          g.closePath(); g.fill();
+          g.fillStyle = 'rgba(248,226,150,.95)';
+          g.beginPath(); g.ellipse(lx, ly - 31, 7, 13, 0, 0, 6.284); g.fill();
+          g.strokeStyle = 'rgba(236,208,150,.45)'; g.lineWidth = 2;
+          g.beginPath();
+          g.moveTo(lx - 12, ly - 16);
+          g.quadraticCurveTo(lx - 15, ly - 34, lx - 8, ly - 50);
+          g.lineTo(lx + 8, ly - 50);
+          g.quadraticCurveTo(lx + 15, ly - 34, lx + 12, ly - 16);
+          g.stroke();
+          g.fillStyle = '#2c2416';
+          g.fillRect(lx - 10, ly - 54, 20, 5);
+          /* табурет и рюкзак */
+          g.fillStyle = '#151009';
+          g.fillRect(w * .42, ty - 48, 50, 9);
+          g.fillRect(w * .428, ty - 39, 8, 39);
+          g.fillRect(w * .458, ty - 39, 8, 39);
+          g.fillStyle = '#0e0b07';
+          g.beginPath(); g.ellipse(w * .53, ty - 17, 36, 26, -.2, 0, 6.284); g.fill();
+        }},
+        { d: .75, k: 'near', f: (g, W, Hh, r) => {
+          /* она сидит под окном, подтянув колени */
+          figure(g, w * .88, floorY, h * .32, '#070604', { slim: true, hair: true, sit: true, flip: true });
+          const grd = g.createLinearGradient(0, h + PAD, 0, h * .72);
+          grd.addColorStop(0, 'rgba(4,4,3,.8)'); grd.addColorStop(1, 'rgba(4,4,3,0)');
+          g.fillStyle = grd; g.fillRect(-PAD, h * .72, w + PAD * 2, h * .28 + PAD);
+        }}
+      ];
+    },
+    frame(g, w, h, t) {
+      const lx = w * .06 + w * .3 * .46, ly = h * .82 - 104 - 30;
+      const flick = .85 + Math.sin(t * 7.3) * .08 + Math.sin(t * 17) * .05;
+      glow(g, lx, ly, 320 * flick, '236,190,96', .16);
+      glow(g, lx, ly, 62 * flick, '255,220,140', .3);
+    }
+  },
+
+
+  /* Эпилог. Первое тёплое утро за одиннадцать зим. */
+  spring: {
+    amb: 'calm',
+    fx: { fireflies: 70, dust: 60, tint: '#cfe08a', tintA: .1, wind: .5 },
+    layers(w, h, rng) {
+      const H = h * .54;
+      return [
+        { d: 0, k: 'sky', f: (g, W, Hh, r) => {
+          skyGrad(g, w, h, [[0, '#5f86a8'], [.4, '#93b0bd'], [.66, '#cbd2b4'], [1, '#a9b892']]);
+          glow(g, w * .78, h * .18, h * .6, '255,240,190', .35);
+          /* облака — рыхлые, из мелких пятен */
+          for (let i = 0; i < 9; i++) {
+            const cx = rr(r, -60, w + 60), cy = rr(r, h * .06, h * .34), s = rr(r, .7, 1.5);
+            for (let j = 0; j < 12; j++) {
+              g.fillStyle = 'rgba(255,255,250,' + rr(r, .04, .1) + ')';
+              g.beginPath();
+              g.ellipse(cx + rr(r, -90, 90) * s, cy + rr(r, -14, 14) * s, rr(r, 40, 110) * s, rr(r, 9, 22) * s, 0, 0, 6.284);
+              g.fill();
+            }
+          }
+          birds(g, w * .32, h * .18, 11, 'rgba(50,60,58,.42)', r);
+        }},
+        { d: .08, k: 'hills', f: (g, W, Hh, r) => {
+          ridge(g, w, h, H - 22, 30, 'rgba(120,140,124,.7)', r);
+          ridge(g, w, h, H, 24, 'rgba(88,110,88,.8)', r);
+        }},
+        { d: .22, k: 'forest', f: (g, W, Hh, r) => {
+          treeRow(g, w, H + 22, '#3d5a3a', r, { n: 26, min: 60, max: 150, pine: .35, dead: .08 });
+        }},
+        { d: .5, k: 'meadow', f: (g, W, Hh, r) => {
+          /* луг растворяется в лесу — без жёсткой границы */
+          const grd0 = g.createLinearGradient(0, H + 6, 0, H + 90);
+          grd0.addColorStop(0, 'rgba(78,107,66,0)'); grd0.addColorStop(1, 'rgba(78,107,66,1)');
+          g.fillStyle = '#4e6b42'; g.fillRect(-PAD, H + 80, w + PAD * 2, h + PAD);
+          g.fillStyle = grd0; g.fillRect(-PAD, H + 6, w + PAD * 2, 80);
+          const grd = g.createLinearGradient(0, H + 20, 0, h + PAD);
+          grd.addColorStop(0, 'rgba(150,168,110,0)');
+          grd.addColorStop(.22, 'rgba(150,168,110,.34)');
+          grd.addColorStop(1, 'rgba(60,80,50,.2)');
+          g.fillStyle = grd; g.fillRect(-PAD, H + 20, w + PAD * 2, h);
+          g.fillStyle = 'rgba(158,148,116,.32)';
+          g.beginPath();
+          g.moveTo(w * .5, H + 24); g.quadraticCurveTo(w * .42, h * .8, w * .1, h + PAD);
+          g.lineTo(w * .4, h + PAD); g.quadraticCurveTo(w * .53, h * .8, w * .54, H + 24);
+          g.closePath(); g.fill();
+          for (let i = 0; i < 220; i++) {
+            const y = rr(r, H + 26, h + 20);
+            const k = (y - H) / (h - H);
+            g.fillStyle = pick(r, ['rgba(232,226,140,', 'rgba(226,180,190,', 'rgba(240,240,232,']) + rr(r, .25, .7) + ')';
+            g.beginPath(); g.arc(rr(r, -PAD, w + PAD), y, .8 + k * 2.4, 0, 6.284); g.fill();
+          }
+        }},
+        { d: .8, k: 'near', f: (g, W, Hh, r) => {
+          figure(g, w * .2, h * .78, h * .22, 'rgba(24,32,24,.9)', { pack: true, arms: 'down', legs: [.16, -.14] });
+          figure(g, w * .265, h * .782, h * .165, 'rgba(24,32,24,.9)', { slim: true, hair: true, arms: 'down', legs: [-.1, .12] });
+          grassRow(g, -PAD, w + PAD, h + 16, 110, 'rgba(46,64,38,.9)', r, 130);
+        }}
+      ];
+    }
+  }
+
+});
+
+/* ───────────────────────── 4. Сюжет ───────────────────────── */
+/* Узел: реплики, затем одно из — выбор, осмотр сцены, мини-сцена
+   или переход дальше. Эффекты собраны в eff, чтобы движок мог
+   применить их одинаково откуда угодно. */
+
+const STORY = {
+
+/* ════════ Глава I. Карантинная зона ════════ */
+
+start: {
+  scene: 'qz_night', chapter: [1, 'Карантинная зона'],
+  lines: [
+    { t: 'Одиннадцать лет назад в этом городе жило два миллиона человек.' },
+    { t: 'Сейчас — четыре тысячи, и все они спят за одним забором. Периметр держат прожектора, комендантский час и привычка не спрашивать, куда делся сосед.' },
+    { t: 'Дождь идёт третьи сутки. Это хорошо: в дождь караул смотрит на свои сапоги.' },
+    { s: 'Егор', t: 'Стой здесь. И не свети лицом.' }
+  ],
+  then: 'ch1_meet'
+},
+
+ch1_meet: {
+  lines: [
+    { t: 'Девчонке лет четырнадцать. Куртка на два размера больше, рукава подвёрнуты втрое. Она смотрит не на забор, а на тебя — и это неприятнее прожектора.' },
+    { s: 'Ася', t: 'Ты Егор? Мне сказали, будет старик.' },
+    { s: 'Егор', t: 'Тебе сказали правду.' },
+    { s: 'Ася', t: 'Мне сказали, ты возишь ящики. А я не ящик.' }
+  ],
+  choices: [
+    { t: '«Сегодня — ящик. Ящики не разговаривают».', to: 'ch1_cold', eff: { trust: -1 } },
+    { t: '«Ящики я не теряю. Тебя тоже не потеряю».', to: 'ch1_warm', eff: { trust: 1 }, tag: 'trust' },
+    { t: 'Промолчать и проверить крепление рюкзака.', to: 'ch1_silent' }
+  ]
+},
+
+ch1_cold: {
+  lines: [
+    { s: 'Ася', t: 'Ясно.' },
+    { t: 'Она отворачивается к сетке и считает витки колючки. Досчитывает до сорока и начинает заново. Это у неё вместо ответа.' }
+  ],
+  then: 'ch1_deal'
+},
+
+ch1_warm: {
+  lines: [
+    { t: 'Она хмыкает — коротко, будто проверяет, работает ли ещё эта мышца.' },
+    { s: 'Ася', t: 'Записываю. «Не потеряю». Потом припомню.' }
+  ],
+  then: 'ch1_deal'
+},
+
+ch1_silent: {
+  lines: [
+    { t: 'Ты молчишь. Она ждёт ровно столько, сколько нужно, чтобы понять: ответа не будет, — и кивает сама себе.' },
+    { s: 'Ася', t: 'Хорошо. Молчаливых я знаю.' }
+  ],
+  then: 'ch1_deal'
+},
+
+ch1_deal: {
+  journal: { t: 'Заказ', d: 'Довезти девочку по имени Ася до ГЭС за кольцом. Оплата — при передаче. Вопросов не задавать: за них не платят.' },
+  lines: [
+    { t: 'Артель дала половину вперёд: два блока патронов, банка тушёнки, канистра под воду. Вторую половину обещали на месте — на плотине, за кольцом, где, по слухам, кто-то до сих пор делает лекарство.' },
+    { t: 'Слухам ты не веришь. Веришь бумаге и весу в руке.' },
+    { s: 'Ася', t: 'Далеко идти?' },
+    { s: 'Егор', t: 'Девять дней, если повезёт с погодой. Двенадцать, если нет.' },
+    { s: 'Ася', t: 'А если совсем не повезёт?' },
+    { s: 'Егор', t: 'Тогда считать будет некому.' }
+  ],
+  then: 'ch1_search'
+},
+
+ch1_search: {
+  lines: [
+    { t: 'До смены караула — минут двадцать. У стены свалены ящики со старого распределителя. Люди сюда не ходят: считается, что всё давно вынесли.' },
+    { t: 'Люди вообще многое считают.' }
+  ],
+  search: {
+    hint: 'Осмотреть двор',
+    points: [
+      { x: .14, y: .56, label: 'Ящики', t: 'Под гнилой фанерой — три патрона в промасленной тряпке и пустая бутылка с толстым дном. Кто-то прятал и не вернулся.', eff: { ammo: 3, give: ['bottle'] } },
+      { x: .63, y: .62, label: 'Труп собаки', t: 'Не собака. Что-то, что было собакой, а потом проросло изнутри серым. Обходишь по широкой дуге.' },
+      { x: .87, y: .44, label: 'Будка', t: 'В будке связиста — початая бутылка спирта и моток скотча. Сегодняшний вечер удался.', eff: { give: ['spirt', 'tape'] } },
+      { x: .42, y: .66, label: 'Лужа', t: 'В луже отражается вышка и кусок неба. Никакого неба там на самом деле нет — только вода и свет.' }
+    ],
+    then: 'ch1_alarm'
+  }
+},
+
+ch1_alarm: {
+  lines: [
+    { t: 'Луч прожектора замирает. Потом идёт обратно — быстрее, чем ходил.' },
+    { s: 'Ася', t: 'Егор.' },
+    { s: 'Егор', t: 'Вижу.' },
+    { t: 'На вышке кто-то говорит в рацию. Слов не разобрать, но интонацию ты знаешь наизусть: так говорят, когда уже решили стрелять и уточняют, в кого.' }
+  ],
+  choices: [
+    { t: 'В коллектор. Под улицей есть старый сброс.', to: 'ch1_toTunnel', tag: 'risk' },
+    { t: 'Отдать патрульным спирт. Пусть подавятся.', to: 'ch1_bribe', tag: 'cost', if: s => (s.items.spirt || 0) > 0 },
+    { t: 'Переждать за ящиками. Луч уйдёт.', to: 'ch1_wait' }
+  ]
+},
+
+ch1_bribe: {
+  lines: [
+    { t: 'Ты выходишь на свет, подняв руки так, чтобы бутылка была видна раньше лица.' },
+    { s: 'Голос', t: 'Стой где стоишь.' },
+    { s: 'Егор', t: 'Стою. Спирт медицинский. Двое нас, идём на юг, к утру нас тут не будет.' },
+    { t: 'Пауза. Дождь считает за всех.' },
+    { s: 'Голос', t: 'Ставь и иди. И чтоб я вас не видел.' },
+    { t: 'Дешевле, чем ты думал. Дороже, чем хотелось.' }
+  ],
+  eff: { take: 'spirt' },
+  then: 'ch1_toTunnel'
+},
+
+ch1_wait: {
+  lines: [
+    { t: 'Вы вжимаетесь в ящики. Луч проходит по стене, по её плечу, по твоему сапогу — и не останавливается.' },
+    { t: 'А потом на вышке включают второй прожектор.' },
+    { s: 'Егор', t: 'В коллектор. Бегом.' }
+  ],
+  eff: { hp: -5 },
+  then: 'ch1_toTunnel'
+},
+
+ch1_toTunnel: {
+  lines: [
+    { t: 'Крышка сброса весит как совесть. Ты сдвигаешь её плечом, Ася уходит вниз первой — без единого лишнего звука, будто всю жизнь этим занималась.' },
+    { s: 'Егор', t: 'Ты часто по коллекторам?' },
+    { s: 'Ася', t: 'Я часто там, где меня не ищут.' }
+  ],
+  then: 'ch2_in'
+},
+
+/* ════════ Глава II. Коллектор ════════ */
+
+ch2_in: {
+  scene: 'tunnel', chapter: [2, 'Коллектор'],
+  lines: [
+    { t: 'Внизу воздух стоит. Он не пахнет — он лежит на языке, тяжёлый и сладковатый, как перезрелая мука.' },
+    { t: 'Фонарь выхватывает свод. По бетону идёт серое: сначала пятнами, потом сплошняком, потом — вверх, в темноту, где уже не бетон, а что-то другое.' },
+    { s: 'Егор', t: 'Дыши через ткань. Не трогай стены.' },
+    { s: 'Ася', t: 'Мне можно.' },
+    { s: 'Егор', t: 'Что — можно?' },
+    { s: 'Ася', t: 'Дышать. Мне ничего не будет. Поэтому меня и везут.' }
+  ],
+  journal: { t: 'Ася', d: 'Говорит, что споры ей не вредят. Говорит спокойно, как о цвете глаз. Проверять не хочется.' },
+  then: 'ch2_choice'
+},
+
+ch2_choice: {
+  lines: [
+    { t: 'Ты стоишь и смотришь на неё, а мука оседает на плечах.' }
+  ],
+  choices: [
+    { t: '«Всё равно закрой лицо. Мне так спокойнее».', to: 'ch2_care', eff: { trust: 1 }, tag: 'trust' },
+    { t: '«Тогда иди первой. Проверим».', to: 'ch2_test', eff: { trust: -2 }, tag: 'risk' },
+    { t: 'Отдать ей свой запасной фильтр.', to: 'ch2_filter', eff: { trust: 2, take: 'filter' }, tag: 'cost', if: s => (s.items.filter || 0) > 0 }
+  ]
+},
+
+ch2_care: {
+  lines: [
+    { s: 'Ася', t: 'Тебе спокойнее.' },
+    { t: 'Она натягивает воротник до глаз. Не потому что боится — потому что ты попросил. Разница небольшая, но ты её замечаешь.' }
+  ],
+  then: 'ch2_hear'
+},
+
+ch2_test: {
+  lines: [
+    { t: 'Она идёт вперёд не оглядываясь. Спина прямая, шаг ровный.' },
+    { s: 'Ася', t: 'Смотри внимательно. Второй раз показывать не буду.' },
+    { t: 'Споры садятся ей на волосы, на щёку, на ресницы. Ничего не происходит. Именно это и страшно.' }
+  ],
+  then: 'ch2_hear'
+},
+
+ch2_filter: {
+  lines: [
+    { t: 'Ты откручиваешь свой сменный патрон и вкладываешь ей в ладонь.' },
+    { s: 'Ася', t: 'Мне не надо.' },
+    { s: 'Егор', t: 'Знаю. Возьми.' },
+    { t: 'Она берёт. И — впервые — не находит, что сказать.' }
+  ],
+  then: 'ch2_hear'
+},
+
+ch2_hear: {
+  lines: [
+    { t: 'Впереди щёлкает.' },
+    { t: 'Не капля. Капля падает мягко и мокро. Это — сухо, коротко, с оттяжкой: так щёлкает язык о нёбо. Щелчок уходит в трубу, возвращается эхом, и на эхо отвечает второй щелчок.' },
+    { s: 'Егор', t: 'Глухарь.' },
+    { s: 'Ася', t: 'Кто?' },
+    { s: 'Егор', t: 'Тот, у кого вместо глаз — гриб. Он слушает. Стой на месте и не дыши глубоко.' }
+  ],
+  journal: { t: 'Глухари', d: 'Слепые. Ходят на слух, щёлкают и слушают отражение. Пока стоишь тихо — ты стена.' },
+  then: 'ch2_stealth'
+},
+
+ch2_stealth: {
+  mini: {
+    type: 'timing', rounds: 3, span: 2100, zone: .3,
+    title: 'Пройти мимо глухаря',
+    desc: 'Он щёлкает и слушает. Шаг делают между щелчками — когда полоса входит в тихую зону. Пробел или клик.',
+    ok: 'ch2_pass', fail: 'ch2_caught'
+  }
+},
+
+ch2_pass: {
+  lines: [
+    { t: 'Три шага. Пауза. Ещё три. Тварь стоит в метре, повернув к вам голову без лица, и слушает трубу, воду, город наверху — всё, кроме вас.' },
+    { t: 'Ася держится за твой рукав. Пальцы белые.' },
+    { t: 'Вы выходите за поворот, и только там она отпускает.' },
+    { s: 'Ася', t: 'Я думала, они быстрее.' },
+    { s: 'Егор', t: 'Они быстрее. Просто им не за кем было бежать.' }
+  ],
+  eff: { trust: 1 },
+  then: 'ch2_out'
+},
+
+ch2_caught: {
+  lines: [
+    { t: 'Сапог находит арматуру. Звон — короткий, честный, на всю трубу.' },
+    { t: 'Голова поворачивается на звук раньше, чем ты успеваешь пожалеть. Тварь идёт — не бежит, идёт, как идут по своему дому в темноте.' }
+  ],
+  choices: [
+    { t: 'Бросить бутылку в дальнюю стену.', to: 'ch2_throw', if: s => (s.items.bottle || 0) > 0, eff: { take: 'bottle' } },
+    { t: 'Стрелять. Один патрон, одна голова.', to: 'ch2_shoot', if: s => s.ammo > 0, eff: { ammo: -1 }, tag: 'cost' },
+    { t: 'Схватить её за руку и бежать.', to: 'ch2_run', tag: 'risk' }
+  ]
+},
+
+ch2_throw: {
+  lines: [
+    { t: 'Стекло уходит в темноту и разбивается метрах в двадцати. Глухарь разворачивается всем телом и уходит на звук — быстро, страшно, беззвучно.' },
+    { s: 'Ася', t: 'Ты носишь с собой бутылку.' },
+    { s: 'Егор', t: 'Я ношу с собой шум. Иногда он полезнее патрона.' }
+  ],
+  eff: { trust: 1 },
+  then: 'ch2_out'
+},
+
+ch2_shoot: {
+  lines: [
+    { t: 'Выстрел в трубе — это не звук, это удар по черепу изнутри. Тварь падает. Где-то далеко, в трёх кварталах отсюда, просыпается ещё что-то и начинает идти на грохот.' },
+    { s: 'Егор', t: 'Бежим. Сейчас тут будет людно.' }
+  ],
+  eff: { hp: -5 },
+  then: 'ch2_out'
+},
+
+ch2_run: {
+  lines: [
+    { t: 'Вы бежите по колено в воде. Что-то хватает за плечо — ты бьёшь локтем назад, попадаешь во что-то мягкое и сухое одновременно, и это чувство останется с тобой надолго.' },
+    { t: 'Куртка разодрана. Плечо горит. Но вы наверху.' }
+  ],
+  eff: { hp: -20, trust: -1 },
+  then: 'ch2_out'
+},
+
+ch2_out: {
+  lines: [
+    { t: 'Люк выводит в бетонный колодец, из колодца — в предрассветную серость. Дождь кончился. Город остался за спиной, а впереди лежит то, что одиннадцать лет назад называлось областью.' },
+    { t: 'Ты сверяешься с картой. До моста — час.' }
+  ],
+  then: 'ch3_in'
+}
+};
+
+Object.assign(STORY, {
+
+/* ════════ Глава III. Мост ════════ */
+
+ch3_in: {
+  scene: 'bridge_dawn', chapter: [3, 'Мост'],
+  lines: [
+    { t: 'Солнце встаёт со стороны города — красное, в дыму, будто там до сих пор что-то горит. Река внизу идёт медленно и густо. Туман лежит на воде ровно, как простыня.' },
+    { t: 'Мост уцелел. Пролёт в середине просел, настил провален в двух местах, но железо держит. Железо в этой стране всегда держало дольше людей.' },
+    { s: 'Ася', t: 'Красиво.' },
+    { s: 'Егор', t: 'Красиво — это когда видно далеко. И когда далеко видно тебя.' },
+    { s: 'Ася', t: 'Ты всегда так? Про всё?' },
+    { s: 'Егор', t: 'Одиннадцать лет как.' }
+  ],
+  then: 'ch3_talk'
+},
+
+ch3_talk: {
+  lines: [
+    { t: 'Она садится на парапет, свесив ноги над водой, и болтает ими. Ты стоишь рядом и смотришь на противоположный берег: два раза видел там дым, оба раза чужой.' },
+    { s: 'Ася', t: 'А что на плотине?' }
+  ],
+  choices: [
+    { t: '«Врачи. Они что-то умеют. Тебя посмотрят и отпустят».', to: 'ch3_lie', eff: { flag: 'lied' } },
+    { t: '«Не знаю. Мне платят за дорогу, а не за конец дороги».', to: 'ch3_honest', eff: { trust: 1 }, tag: 'trust' },
+    { t: '«А ты сама что думаешь?»', to: 'ch3_ask', eff: { trust: 2 }, tag: 'trust' }
+  ]
+},
+
+ch3_lie: {
+  lines: [
+    { s: 'Ася', t: 'Посмотрят и отпустят.' },
+    { t: 'Она повторяет это так, как повторяют слова чужого языка — старательно и без смысла.' },
+    { s: 'Ася', t: 'Ага.' },
+    { t: 'Она знает. Ты понимаешь это по спине — прямой, слишком прямой для четырнадцати лет.' }
+  ],
+  then: 'ch3_search'
+},
+
+ch3_honest: {
+  lines: [
+    { s: 'Ася', t: 'Честно. Спасибо.' },
+    { s: 'Егор', t: 'Не за что.' },
+    { s: 'Ася', t: 'Есть за что. Мне все врут с апреля. Ты первый, кто просто не знает.' }
+  ],
+  then: 'ch3_search'
+},
+
+ch3_ask: {
+  lines: [
+    { t: 'Она долго молчит. Туман под ногами шевелится.' },
+    { s: 'Ася', t: 'Я думаю, из меня будут что-то делать. Не спрашивая. Как из тушёнки — бульон.' },
+    { s: 'Ася', t: 'И я всё равно иду. Потому что если из меня выйдет лекарство, то Настя из третьего барака доживёт до шестнадцати. А если не выйдет — я хотя бы посмотрю на реку.' },
+    { t: 'Ты не находишь, что ответить. Это, наверное, и есть ответ.' }
+  ],
+  journal: { t: 'Зачем она идёт', d: 'Она не заложник и не груз. Она решила сама, и решение у неё старше, чем она.' },
+  then: 'ch3_search'
+},
+
+ch3_search: {
+  lines: [
+    { t: 'На мосту стоят четыре машины — там, где их бросили в первую неделю. Одиннадцать лет никто не смотрел в багажники, потому что все смотрели в багажники в первый же месяц.' },
+    { t: 'Почти все.' }
+  ],
+  search: {
+    hint: 'Обыскать мост',
+    points: [
+      { x: .17, y: .6, label: 'Легковая', t: 'В бардачке — детский комикс «Ястреб-14», выпуск шестой. Страницы разбухли, но читать можно.', eff: { give: ['book'] } },
+      { x: .5, y: .54, label: 'Фура', t: 'Кузов пуст, как обещание. Зато под сиденьем — початая упаковка сухпая.', eff: { sup: 2 } },
+      { x: .87, y: .63, label: 'Парапет', t: 'На перилах вырезано ножом: «МЫ ЖДАЛИ ДО 14-го». Дата не указана. Год тем более.' },
+      { x: .35, y: .34, label: 'Ветошь на ферме', t: 'Кто-то привязал к ферме тряпку — метка для своих. Тряпка ещё крепкая. Своих больше нет.', eff: { give: ['rag'] } }
+    ],
+    then: 'ch3_ambush'
+  }
+},
+
+ch3_ambush: {
+  lines: [
+    { t: 'Первый камень падает в воду слева. Это не природа — природа не роняет камни по одному.' },
+    { t: 'Их трое. Выходят из-за фуры: двое с трубами, один с обрезом. Одеты в чужое, лица открытые — значит, не боятся спор. Значит, живут тут давно.' },
+    { s: 'Голос', t: 'Рюкзак и девку. Сам иди.' },
+    { s: 'Ася', t: 'Егор.' },
+    { s: 'Егор', t: 'Стой за мной. Что бы ни было — стой за мной.' }
+  ],
+  choices: [
+    { t: 'Бутыль с огнём. Под ноги, чтоб отсекло.', to: 'ch3_fire', if: s => (s.items.molotov || 0) > 0, eff: { take: 'molotov' }, tag: 'risk' },
+    { t: 'Стрелять первым. Два патрона — двое.', to: 'ch3_gun', if: s => s.ammo >= 2, eff: { ammo: -2 }, tag: 'cost' },
+    { t: 'Отдать рюкзак. Вещи — это только вещи.', to: 'ch3_give', tag: 'cost' },
+    { t: 'Через провал в настиле. Они не полезут.', to: 'ch3_gap', tag: 'risk' }
+  ]
+},
+
+ch3_fire: {
+  lines: [
+    { t: 'Бутылка уходит по низкой дуге и лопается о настил в двух шагах перед ними. Огонь на мокром железе идёт неохотно, зато широко.' },
+    { t: 'Они отступают — не от огня, от того, что кто-то готов был его бросить. С таким человеком дорого связываться.' },
+    { s: 'Голос', t: 'Псих! Псих, слышишь?!' },
+    { s: 'Егор', t: 'Слышу.' }
+  ],
+  eff: { trust: 1 },
+  then: 'ch3_after'
+},
+
+ch3_gun: {
+  lines: [
+    { t: 'Ты стреляешь дважды, и оба раза попадаешь. Третий бросает обрез и убегает так, будто за ним гонится не человек, а вся его прошлая жизнь.' },
+    { t: 'Ася смотрит на тела. Не отворачивается. Это хуже, чем если бы отвернулась.' },
+    { s: 'Ася', t: 'Ты даже не сказал ничего.' },
+    { s: 'Егор', t: 'Слова кончились где-то году в третьем.' }
+  ],
+  eff: { trust: -1, give: ['blade'] },
+  then: 'ch3_after'
+},
+
+ch3_give: {
+  lines: [
+    { t: 'Ты снимаешь рюкзак и ставишь на настил. Медленно, обеими руками, чтобы каждый видел: рук в карманах нет.' },
+    { s: 'Егор', t: 'Забирайте. Девочка идёт со мной.' },
+    { t: 'Тот, что с обрезом, долго смотрит тебе в лицо. Потом кивает.' },
+    { s: 'Голос', t: 'Иди, пока я добрый.' },
+    { t: 'В рюкзаке была половина припасов. И карта. Карту жальче всего.' }
+  ],
+  eff: { sup: -3, ammo: -2, trust: 2 },
+  then: 'ch3_after'
+},
+
+ch3_gap: {
+  lines: [
+    { t: 'Ты толкаешь её к провалу. Балка узкая, мокрая, внизу — двадцать метров и вода, которая только выглядит мягкой.' },
+    { t: 'Она идёт первой, руки в стороны, и не смотрит вниз. Ты идёшь вторым и смотришь. Зря.' },
+    { t: 'Труба ударяет по спине уже на балке. Ты удерживаешься чудом и чужой ошибкой: они не пошли следом.' }
+  ],
+  eff: { hp: -15, trust: 1 },
+  then: 'ch3_after'
+},
+
+ch3_after: {
+  lines: [
+    { t: 'Вы уходите с моста, когда солнце уже поднялось на ладонь. Позади остаётся железо, туман и вырезанная ножом дата, которую некому объяснить.' },
+    { s: 'Ася', t: 'Ты в порядке?' },
+    { s: 'Егор', t: 'Я в дороге. Это почти то же самое.' }
+  ],
+  then: 'ch4_in'
+},
+
+/* ════════ Глава IV. Шоссе ════════ */
+
+ch4_in: {
+  scene: 'highway', chapter: [4, 'Шоссе'],
+  lines: [
+    { t: 'Трасса заросла так, что видно только направление. Асфальт лопнул от корней, разметка проступает пятнами, как старая татуировка.' },
+    { t: 'Идёте по обочине, друг за другом. Она подобрала палку и сбивает ею головки сухих зонтиков — по одной на каждый шаг.' },
+    { s: 'Ася', t: 'Расскажи что-нибудь.' },
+    { s: 'Егор', t: 'Я не рассказчик.' },
+    { s: 'Ася', t: 'Тогда я расскажу. Тебе понравится: там про ястреба.' }
+  ],
+  then: 'ch4_book'
+},
+
+ch4_book: {
+  lines: [
+    { t: 'Она вытаскивает из-за пазухи потрёпанный комикс — тот самый или его брата-близнеца, у неё, оказывается, свой.' }
+  ],
+  choices: [
+    { t: 'Отдать ей найденный на мосту выпуск.', to: 'ch4_gift', if: s => (s.items.book || 0) > 0, eff: { take: 'book', trust: 3 }, tag: 'trust' },
+    { t: '«Не сейчас. Смотри по сторонам».', to: 'ch4_no', eff: { trust: -1 } },
+    { t: '«Читай вслух. Только тихо».', to: 'ch4_read', eff: { trust: 2 }, tag: 'trust' }
+  ]
+},
+
+ch4_gift: {
+  lines: [
+    { t: 'Ты молча протягиваешь ей шестой выпуск. Она смотрит на обложку так, как в старом мире смотрели на билет на самолёт.' },
+    { s: 'Ася', t: 'Шестой. У меня был четвёртый и седьмой. Шестого не было никогда.' },
+    { s: 'Ася', t: 'Там Ястреб теряет крыло.' },
+    { s: 'Егор', t: 'И что, летает?' },
+    { s: 'Ася', t: 'Летает. Хуже, но летает.' }
+  ],
+  journal: { t: '«Ястреб-14»', d: 'Шестой выпуск. Ястреб теряет крыло и всё равно летает — хуже, но летает. Она перечитывает его на каждом привале.' },
+  then: 'ch4_stranger'
+},
+
+ch4_no: {
+  lines: [
+    { t: 'Она убирает комикс. Палка перестаёт сбивать зонтики.' },
+    { t: 'Дальше идёте молча — километра три. За это время ты успеваешь дважды пожалеть и ни разу не сказать.' }
+  ],
+  then: 'ch4_stranger'
+},
+
+ch4_read: {
+  lines: [
+    { t: 'Она читает шёпотом, на ходу, пропуская описания и оставляя реплики. Ястреб теряет крыло на четвёртой странице и всю остальную книжку учится летать заново.' },
+    { s: 'Ася', t: '«...и тогда он понял, что высота — это не про крылья».' },
+    { s: 'Ася', t: 'Дурацкая фраза, да?' },
+    { s: 'Егор', t: 'Нормальная фраза.' }
+  ],
+  then: 'ch4_stranger'
+},
+
+ch4_stranger: {
+  lines: [
+    { t: 'На двадцатом километре у перевёрнутого автобуса сидит человек. Один. Нога перетянута ремнём выше колена, под ремнём — чёрное.' },
+    { t: 'Он видит вас и не тянется к оружию. У него его нет.' },
+    { s: 'Голос', t: 'Воды. Полглотка.' },
+    { s: 'Ася', t: 'Егор.' },
+    { t: 'Ты знаешь три вещи. Первая: у него гангрена, и он не жилец. Вторая: припасов у вас на девять дней, а идти двенадцать. Третья: она смотрит.' }
+  ],
+  choices: [
+    { t: 'Дать воды и еды. Он человек.', to: 'ch4_help', eff: { sup: -1, trust: 3 }, tag: 'cost' },
+    { t: 'Пройти мимо. Он всё равно не дойдёт.', to: 'ch4_pass', eff: { trust: -3 } },
+    { t: 'Оставить перевязку и уйти.', to: 'ch4_bandage', if: s => (s.items.bandage || 0) > 0, eff: { take: 'bandage', trust: 2 }, tag: 'cost' },
+    { t: 'Спросить, что он видел на юге.', to: 'ch4_info' }
+  ]
+},
+
+ch4_help: {
+  lines: [
+    { t: 'Ты садишься рядом и держишь флягу, пока он пьёт. Пьёт он долго и стыдно — так пьют, когда уже не рассчитывают.' },
+    { s: 'Голос', t: 'Спасибо. Слушай... на юге, у ТЦ, — не ходите через главный вход. Там их гнездо. Идите со стороны погрузки.' },
+    { s: 'Голос', t: 'И ещё. Артель на плотине — они не врачи. Ты понял? Не врачи.' },
+    { t: 'Ася отходит на десять шагов и стоит спиной. Плечи ровные.' }
+  ],
+  eff: { flag: 'warned' },
+  journal: { t: 'Слова у автобуса', d: 'Через ТЦ — только со стороны погрузки. И: «Артель на плотине — не врачи».' },
+  then: 'ch4_craft'
+},
+
+ch4_pass: {
+  lines: [
+    { t: 'Ты берёшь её за плечо и разворачиваешь.' },
+    { s: 'Егор', t: 'Идём.' },
+    { s: 'Ася', t: 'Он же просил.' },
+    { s: 'Егор', t: 'Просят все.' },
+    { t: 'Метров через двести она вырывает плечо. Дальше идёт сама, в трёх шагах позади, и на привале садится спиной.' }
+  ],
+  then: 'ch4_craft'
+},
+
+ch4_bandage: {
+  lines: [
+    { t: 'Ты кладёшь перевязку рядом с ним — так, чтобы дотянулся, — и отходишь.' },
+    { s: 'Голос', t: 'Не поможет.' },
+    { s: 'Егор', t: 'Знаю.' },
+    { s: 'Голос', t: 'Всё равно спасибо. У ТЦ идите со стороны погрузки. Главный вход — их.' }
+  ],
+  eff: { flag: 'warned' },
+  journal: { t: 'Слова у автобуса', d: 'Через ТЦ — только со стороны погрузки.' },
+  then: 'ch4_craft'
+},
+
+ch4_info: {
+  lines: [
+    { s: 'Егор', t: 'Что на юге?' },
+    { s: 'Голос', t: 'Вода дай — скажу.' },
+    { s: 'Егор', t: 'Скажи — дам.' },
+    { t: 'Он смеётся. Смех переходит в кашель, кашель — в тишину.' },
+    { s: 'Голос', t: 'Торговый центр. Не суйтесь в главный вход. И держитесь подальше от плотины, если девчонка вам дорога.' },
+    { t: 'Ты даёшь ему воды. Потом. Когда она уже отвернулась и не видит, что ты всё-таки дал.' }
+  ],
+  eff: { sup: -1, flag: 'warned' },
+  journal: { t: 'Слова у автобуса', d: 'В ТЦ — со стороны погрузки. «Держитесь подальше от плотины, если девчонка вам дорога».' },
+  then: 'ch4_craft'
+},
+
+ch4_craft: {
+  lines: [
+    { t: 'К вечеру находите съезд и под ним — сухую нишу. Пока светло, можно собрать что-нибудь полезное из того, что таскаешь.' }
+  ],
+  mini: {
+    type: 'craft',
+    title: 'Собрать снаряжение',
+    desc: 'Выберите, что соединить. Спирт + ветошь + бутылка — бутыль с огнём. Ветошь + спирт — перевязка.',
+    ok: 'ch5_in'
+  }
+}
+});
+
+Object.assign(STORY, {
+
+/* ════════ Глава V. Торговый центр ════════ */
+
+ch5_in: {
+  scene: 'mall', chapter: [5, 'Торговый центр'],
+  lines: [
+    { t: 'Коробка торгового центра стоит посреди пустого поля парковки, как выброшенный на берег корабль. Кровля провалилась в трёх местах, и через провалы внутрь падает свет — тремя косыми столбами, в которых ходит пыль.' },
+    { t: 'Здесь должна быть аптека. Аптеки грабили первыми, но грабили быстро — а быстро всегда значит плохо.' },
+    { s: 'Ася', t: 'Тут красиво.' },
+    { s: 'Егор', t: 'Тут гнездо.' },
+    { s: 'Ася', t: 'Одно другому не мешает.' }
+  ],
+  then: 'ch5_way'
+},
+
+ch5_way: {
+  lines: [
+    { t: 'Два входа: стеклянный портал главного и железная рампа погрузки с торца.' }
+  ],
+  choices: [
+    { t: 'Со стороны погрузки — как сказал тот, у автобуса.', to: 'ch5_dock', if: s => !!s.flags.warned },
+    { t: 'Через главный: там светлее и видно, куда ставить ногу.', to: 'ch5_main', tag: 'risk' },
+    { t: 'Обойти здание и посмотреть с торца.', to: 'ch5_dock' }
+  ]
+},
+
+ch5_main: {
+  lines: [
+    { t: 'Стекло хрустит. Хрустит громко — по всему атриуму, вверх, на второй этаж, где что-то немедленно перестаёт спать.' },
+    { t: 'Из темноты галереи выходят двое. Потом ещё трое. Головы поворачиваются на звук, все разом, как подсолнухи за солнцем.' },
+    { s: 'Егор', t: 'Назад. Медленно.' }
+  ],
+  eff: { hp: -10 },
+  then: 'ch5_stealth'
+},
+
+ch5_dock: {
+  lines: [
+    { t: 'Рампа завалена палетами. Ты снимаешь рюкзак, проталкиваешь его в щель, пролезаешь сам, потом принимаешь её.' },
+    { t: 'Внутри — склад, за складом — атриум. В атриуме кто-то есть: слышно, как переступают. Не двое. Больше.' },
+    { s: 'Егор', t: 'Идём по краю. Наступай туда, куда наступаю я.' }
+  ],
+  then: 'ch5_stealth'
+},
+
+ch5_stealth: {
+  mini: {
+    type: 'timing', rounds: 4, span: 1750, zone: .26,
+    title: 'Пройти атриум',
+    desc: 'Под ногами вода и стекло. Шаг делается в тишине между их щелчками. Четыре шага — четыре попадания в зону.',
+    ok: 'ch5_pass', fail: 'ch5_fail'
+  }
+},
+
+ch5_pass: {
+  lines: [
+    { t: 'Вы идёте по кромке воды, где мох глушит подошву. Один раз она замирает с поднятой ногой и стоит так, кажется, полминуты — пока ближайшая тварь не разворачивается и не уходит вглубь.' },
+    { t: 'Аптека на первом этаже. Дверь выбита давно, но за стойкой есть ящик, до которого никто не додумался.' }
+  ],
+  eff: { trust: 1 },
+  then: 'ch5_loot'
+},
+
+ch5_fail: {
+  lines: [
+    { t: 'Нога уходит в воду по щиколотку. Всплеск — короткий, детский, ничтожный.' },
+    { t: 'Атриум отвечает щелчками со всех сторон сразу.' },
+    { s: 'Егор', t: 'Бегом! К аптеке!' },
+    { t: 'Ты бежишь, тащишь её за куртку, что-то цепляет плечо — не зубы, стекло, — и вы валитесь за стойку. Тварь проносится мимо, ориентируясь на эхо собственного крика.' },
+    { t: 'Кровь идёт сильно. Значит, живой.' }
+  ],
+  eff: { hp: -25 },
+  then: 'ch5_loot'
+},
+
+ch5_loot: {
+  lines: [
+    { t: 'За стойкой — темно и тесно. Она светит фонарём, ты разбираешь ящик.' }
+  ],
+  search: {
+    hint: 'Разобрать аптеку',
+    points: [
+      { x: .22, y: .62, label: 'Ящик под стойкой', t: 'Бинт, две ампулы, спирт. Спирт целый — чудо в этих широтах.', eff: { give: ['spirt', 'rag'], sup: 1 } },
+      { x: .45, y: .66, label: 'Кассовый узел', t: 'В ящике кассы — стеклянная бутылка с толстым дном и чей-то паспорт. Паспорт ты кладёшь обратно.', eff: { give: ['bottle'] } },
+      { x: .68, y: .48, label: 'Витрина', t: 'Между полками — сменный фильтр для респиратора, в упаковке. Одиннадцать лет и ни одной царапины.', eff: { give: ['filter'] } },
+      { x: .56, y: .34, label: 'Плеер', t: 'На витрине с мелочью — кассета без коробки. От руки: «для дороги». Ася забирает её раньше, чем ты успеваешь.', eff: { give: ['music'] } },
+      { x: .87, y: .6, label: 'Тележка', t: 'В тележке — консервы. Вздутые. Все, кроме двух.', eff: { sup: 2 } }
+    ],
+    then: 'ch5_hurt'
+  }
+},
+
+ch5_hurt: {
+  lines: [
+    { t: 'Она смотрит на твоё плечо. Ты смотришь на выход.' },
+    { s: 'Ася', t: 'Давай перевяжу.' },
+    { s: 'Егор', t: 'Само.' },
+    { s: 'Ася', t: 'Само у мёртвых.' }
+  ],
+  choices: [
+    { t: 'Дать перевязать.', to: 'ch5_bind', eff: { trust: 2, hp: 15 }, tag: 'trust' },
+    { t: 'Перевязаться самому.', to: 'ch5_self', if: s => (s.items.bandage || 0) > 0, eff: { take: 'bandage', hp: 20 } },
+    { t: '«Потом. Уходим».', to: 'ch5_out', eff: { trust: -1 } }
+  ]
+},
+
+ch5_bind: {
+  lines: [
+    { t: 'Она затягивает узел зубами, как её кто-то когда-то научил. Пальцы холодные и очень уверенные.' },
+    { s: 'Ася', t: 'У меня мама была фельдшер.' },
+    { s: 'Егор', t: 'Была?' },
+    { s: 'Ася', t: 'Была.' },
+    { t: 'Больше она ничего не говорит, и ты не спрашиваешь. В этом мире «была» — законченное предложение.' }
+  ],
+  then: 'ch5_out'
+},
+
+ch5_self: {
+  lines: [
+    { t: 'Ты перетягиваешь плечо одной рукой и зубами. Получается криво, но держит.' },
+    { s: 'Ася', t: 'Мог бы просто дать.' },
+    { s: 'Егор', t: 'Мог бы.' }
+  ],
+  then: 'ch5_out'
+},
+
+ch5_out: {
+  lines: [
+    { t: 'Вы уходите тем же путём, через рампу. Позади, в атриуме, в столбах света висит пыль — та самая, что висела там до вас и будет висеть после.' },
+    { t: 'К ночи находите балку под мостом-путепроводом и разводите огонь. Первый огонь за четыре дня.' }
+  ],
+  then: 'ch6_in'
+},
+
+/* ════════ Глава VI. Привал ════════ */
+
+ch6_in: {
+  scene: 'campfire', chapter: [6, 'Привал'],
+  lines: [
+    { t: 'Костёр маленький, в яме, прикрытый с трёх сторон — так, чтобы свет не ушёл дальше десяти шагов.' },
+    { t: 'Она сидит напротив, обхватив колени. На коленях — плеер, найденный неизвестно где и неизвестно когда починенный.' },
+    { s: 'Ася', t: 'Он работает. Честно. Просто батареек нет.' },
+    { s: 'Егор', t: 'В рации есть.' },
+    { s: 'Ася', t: 'Ты дашь мне батарейки из рации?' },
+    { s: 'Егор', t: 'Я думаю.' }
+  ],
+  then: 'ch6_battery'
+},
+
+ch6_battery: {
+  choices: [
+    { t: 'Отдать батарейки. Пусть послушает.', to: 'ch6_music', eff: { trust: 3, flag: 'noradio' }, tag: 'cost' },
+    { t: '«Рация нужнее. Прости».', to: 'ch6_nomusic', eff: { trust: -1 } },
+    { t: 'Отдать и попросить включить громче.', to: 'ch6_music2', eff: { trust: 4 }, tag: 'trust', if: s => s.trust >= 5 }
+  ]
+},
+
+ch6_music: {
+  lines: [
+    { t: 'Плёнка шуршит секунды три, а потом из динамика выходит женский голос под расстроенную гитару — тихий, дребезжащий, из мира, где были студии звукозаписи.' },
+    { t: 'Ася закрывает глаза.' },
+    { s: 'Ася', t: 'Мама так пела. Не так же. Просто — так.' },
+    { t: 'Ты смотришь в огонь и думаешь о том, что у тебя тоже кто-то так пел, и что ты не помнишь мотива.' }
+  ],
+  then: 'ch6_photo'
+},
+
+ch6_music2: {
+  lines: [
+    { t: 'Ты выкручиваешь громкость до половины. Это глупо: звук в лесу идёт далеко. Это опасно. Это того стоит.' },
+    { t: 'Она слушает, а потом начинает подпевать — фальшиво и вполголоса. Ты не останавливаешь.' },
+    { t: 'На третьей песне ты ловишь себя на том, что улыбаешься, и это ощущается как забытый язык.' }
+  ],
+  eff: { hp: 10 },
+  then: 'ch6_photo'
+},
+
+ch6_nomusic: {
+  lines: [
+    { t: 'Она убирает плеер, не споря. Это хуже, чем если бы спорила.' },
+    { s: 'Ася', t: 'Ладно. Значит, потом.' },
+    { t: 'Никакого «потом» в этой дороге не предусмотрено, и вы оба это знаете.' }
+  ],
+  then: 'ch6_photo'
+},
+
+ch6_photo: {
+  lines: [
+    { t: 'Огонь садится. Она давно уснула — сидя, уронив голову на рюкзак.' },
+    { t: 'Ты достаёшь из внутреннего кармана снимок. Достаёшь редко, обычно на восьмой день пути, когда усталость снимает замки.' },
+    { t: 'На снимке женщина держит на плечах девочку лет шести. Девочка смеётся и тянется к чему-то за кадром.' },
+    { t: 'Её звали Лиза. Ей было бы сейчас семнадцать.' }
+  ],
+  eff: { give: ['photo'] },
+  journal: { t: 'Снимок', d: 'Женщина и девочка на плечах. Егор носит фото одиннадцать лет и почти никогда не смотрит.' },
+  then: 'ch6_wake'
+},
+
+ch6_wake: {
+  lines: [
+    { t: 'Ася не спит. Смотрит из-под ресниц, и ты понимаешь, что смотрит давно.' },
+    { s: 'Ася', t: 'Кто это?' }
+  ],
+  choices: [
+    { t: '«Дочь. Была».', to: 'ch6_daughter', eff: { trust: 3 }, tag: 'trust' },
+    { t: '«Никто».', to: 'ch6_nobody', eff: { trust: -2 } },
+    { t: 'Молча убрать снимок.', to: 'ch6_hide' }
+  ]
+},
+
+ch6_daughter: {
+  lines: [
+    { s: 'Ася', t: 'Как её звали?' },
+    { s: 'Егор', t: 'Лиза.' },
+    { t: 'Первый раз за одиннадцать лет ты произносишь это вслух. Имя выходит целым — ты боялся, что рассыплется.' },
+    { s: 'Ася', t: 'Красивое.' },
+    { s: 'Егор', t: 'Обычное.' },
+    { s: 'Ася', t: 'Обычное — это и есть красивое. Сейчас.' },
+    { t: 'Она подсаживается ближе — не вплотную, на расстояние вытянутой руки, — и так вы досиживаете до серого.' }
+  ],
+  journal: { t: 'Лиза', d: 'Дочь. Ей было бы семнадцать. Он назвал имя вслух — впервые за одиннадцать лет.' },
+  then: 'ch7_in'
+},
+
+ch6_nobody: {
+  lines: [
+    { s: 'Ася', t: 'Понятно.' },
+    { t: 'Она поворачивается на другой бок. Ты сидишь со снимком в руке ещё час и злишься непонятно на кого.' }
+  ],
+  then: 'ch7_in'
+},
+
+ch6_hide: {
+  lines: [
+    { t: 'Ты убираешь снимок во внутренний карман и застёгиваешь клапан.' },
+    { s: 'Ася', t: 'У меня тоже есть. В голове только. Бумажные все сгорели.' },
+    { t: 'Она говорит это в темноту, никому. Потом засыпает по-настоящему.' },
+    { t: 'Ты не спишь до рассвета.' }
+  ],
+  eff: { trust: 1 },
+  then: 'ch7_in'
+}
+});
+
+Object.assign(STORY, {
+
+/* ════════ Глава VII. Дом ════════ */
+
+ch7_in: {
+  scene: 'interior', chapter: [7, 'Дом'],
+  lines: [
+    { t: 'На восьмой день приходит зима — не по календарю, а как приходит всё в этом мире: сразу и насовсем. К полудню метёт так, что не видно собственных следов.' },
+    { t: 'Дом стоит на краю деревни, ставни заколочены изнутри — хороший знак: значит, хозяин закрывался от улицы, а не улица от него.' },
+    { t: 'Керосинка нашлась на подоконнике. Керосин — в сенях. Первое тепло за восемь дней.' },
+    { s: 'Ася', t: 'Тут пахнет людьми.' },
+    { s: 'Егор', t: 'Тут пахнет пылью.' },
+    { s: 'Ася', t: 'Пыль от людей и остаётся.' }
+  ],
+  then: 'ch7_search'
+},
+
+ch7_search: {
+  lines: [
+    { t: 'Пока она отогревает руки над стеклом лампы, ты обходишь комнаты. Привычка сильнее совести.' }
+  ],
+  search: {
+    hint: 'Осмотреть дом',
+    points: [
+      { x: .13, y: .34, label: 'Полка', t: 'Банки с соленьями. Три вздулись, две живые. Берёшь живые.', eff: { sup: 2 } },
+      { x: .21, y: .62, label: 'Стол', t: 'Под клеёнкой — патроны от охотничьего, россыпью. Хозяин собирался, но не собрался.', eff: { ammo: 4 } },
+      { x: .73, y: .28, label: 'Окно', t: 'Между досок видно двор и заметённый колодец. И следы. Не ваши — свежие, две пары, прошли час назад в сторону деревни.', eff: { flag: 'tracks' } },
+      { x: .46, y: .56, label: 'Рация на буфете', t: 'Разбитый корпус, но начинка живая. На боку — процарапанный знак Артели: три черты и круг.', eff: { give: ['radio'] } }
+    ],
+    then: 'ch7_radio'
+  }
+},
+
+ch7_radio: {
+  lines: [
+    { t: 'Ася уснула на печи, не сняв ботинок. Ты садишься к лампе и, чтобы не сидеть без дела, крутишь колёсико найденной рации.' },
+    { t: 'Шум. Шум. И вдруг — голос, спокойный, женский, на канале Артели.' }
+  ],
+  choices: [
+    { t: 'Слушать.', to: 'ch7_truth' },
+    { t: 'Выключить. Не твоё дело.', to: 'ch7_off' }
+  ]
+},
+
+ch7_truth: {
+  lines: [
+    { s: 'Марта', t: '...приём. Груз в пути, ориентировочно двое суток. Курьер надёжный, вопросов не задаёт.' },
+    { s: 'Голос', t: 'Материал сохранён? Нам нужен неповреждённый ствол мозга, иначе всё зря.' },
+    { s: 'Марта', t: 'Материал сохранён. Курьер не в курсе. Конец связи.' },
+    { t: 'Рация шипит. Керосинка потрескивает. За стеной метёт.' },
+    { t: 'Ты сидишь очень прямо и очень долго, и в голове очень тихо — так тихо бывает только после близкого разрыва.' },
+    { t: '«Материал» спит в двух метрах от тебя, подложив под щёку комикс про ястреба.' }
+  ],
+  eff: { flag: 'truth', trust: 0 },
+  journal: { t: 'Что слышно по рации', d: 'Артели нужен «неповреждённый ствол мозга». Лекарство — если оно вообще будет — делают из неё. Она об этом не знает. Или знает.' },
+  then: 'ch7_night'
+},
+
+ch7_off: {
+  lines: [
+    { t: 'Ты выключаешь рацию на середине фразы. Некоторые вещи не становятся правдой, пока их не дослушал.' },
+    { t: 'Так тебе сейчас удобнее думать.' }
+  ],
+  then: 'ch7_night'
+},
+
+ch7_night: {
+  lines: [
+    { t: 'Метель стихает под утро. Ты сидишь у окна и смотришь на две пары следов во дворе, засыпанные наполовину.' },
+    { s: 'Ася', t: 'Ты не спал.' },
+    { s: 'Егор', t: 'Спал.' },
+    { s: 'Ася', t: 'Ты сидел вот так всю ночь. Я видела.' }
+  ],
+  choices: [
+    { t: 'Рассказать, что слышал по рации.', to: 'ch7_tellnow', if: s => !!s.flags.truth, eff: { trust: 3, flag: 'toldEarly' }, tag: 'trust' },
+    { t: '«Просто дорога длинная».', to: 'ch7_deflect' },
+    { t: '«Ты знаешь, зачем они тебя ждут?»', to: 'ch7_askher', if: s => !!s.flags.truth }
+  ]
+},
+
+ch7_tellnow: {
+  lines: [
+    { t: 'Ты говоришь коротко, как в рапорте: канал, время, слова. Без своих слов, без утешения — их у тебя нет.' },
+    { t: 'Она слушает, глядя в пол.' },
+    { s: 'Ася', t: 'Значит, всё-таки бульон.' },
+    { s: 'Егор', t: 'Мы можем свернуть. Прямо сейчас. На восток есть посёлки, там людей мало и тварей мало.' },
+    { s: 'Ася', t: 'Можем.' },
+    { t: 'Она не говорит ни да, ни нет. Она просто идёт с тобой дальше — и до самой плотины вы больше об этом не заговариваете.' }
+  ],
+  then: 'ch8_in'
+},
+
+ch7_deflect: {
+  lines: [
+    { s: 'Ася', t: 'Дорога длинная.' },
+    { t: 'Она повторяет за тобой и застёгивает куртку. Разговор окончен — так, как заканчиваются все разговоры, где один врёт, а второй позволяет.' }
+  ],
+  then: 'ch8_in'
+},
+
+ch7_askher: {
+  lines: [
+    { t: 'Она долго молчит, потом говорит очень ровно:' },
+    { s: 'Ася', t: 'Меня укусили в апреле. В бараке. Я три дня сидела и ждала, когда начну щёлкать.' },
+    { s: 'Ася', t: 'Не начала. Через неделю пришли люди Артели с прибором. Прибор пищал. Они очень обрадовались, а потом перестали смотреть мне в глаза.' },
+    { s: 'Ася', t: 'Люди перестают смотреть в глаза, когда уже всё решили. Я не дура, Егор.' },
+    { t: 'Она поправляет лямку и выходит на снег первой.' }
+  ],
+  eff: { trust: 2, flag: 'sheKnows' },
+  journal: { t: 'Она знает', d: 'Знала с апреля. Идёт всё равно.' },
+  then: 'ch8_in'
+},
+
+/* ════════ Глава VIII. Деревня ════════ */
+
+ch8_in: {
+  scene: 'village_snow', chapter: [8, 'Деревня'],
+  lines: [
+    { t: 'Деревня лежит в низине, четыре двора и колокольня без креста. В одном окне горит свет — жёлтый, живой, невозможный.' },
+    { t: 'От света вниз идёт тропа, и на тропе стоят трое. Ждут вас — стоят открыто, руки на виду.' },
+    { t: 'Женщина в середине снимает капюшон. Лет пятьдесят, лицо человека, который давно принял решения за многих.' },
+    { s: 'Марта', t: 'Егор. Мы вас потеряли на четвёртый день.' },
+    { s: 'Егор', t: 'Мы не терялись.' },
+    { s: 'Марта', t: 'Я вижу. Здравствуй, Ася.' }
+  ],
+  then: 'ch8_talk'
+},
+
+ch8_talk: {
+  lines: [
+    { t: 'Марта протягивает мешок: патроны, консервы, сухое горючее. Вторая половина оплаты, честная до грамма.' },
+    { s: 'Марта', t: 'До плотины полдня. Дальше идём вместе.' }
+  ],
+  eff: { ammo: 6, sup: 3 },
+  choices: [
+    { t: '«Что вы с ней сделаете?»', to: 'ch8_ask', if: s => !!s.flags.truth },
+    { t: 'Взять мешок и молчать.', to: 'ch8_silent' },
+    { t: '«Мы дальше сами. Спасибо».', to: 'ch8_refuse', tag: 'risk' }
+  ]
+},
+
+ch8_ask: {
+  lines: [
+    { t: 'Марта не отводит глаз. За это ты её почти уважаешь.' },
+    { s: 'Марта', t: 'Мы вырастим на её тканях культуру и получим сыворотку. Одну партию. Может быть, две.' },
+    { s: 'Егор', t: 'Она это переживёт?' },
+    { s: 'Марта', t: 'Нет.' },
+    { t: 'Слово падает в снег и лежит там, чёрное.' },
+    { s: 'Марта', t: 'В карантинной зоне четыре тысячи человек. В соседней — девять. Я считаю их каждый день, Егор. Ты считаешь одну.' },
+    { s: 'Егор', t: 'Я вожу одну.' }
+  ],
+  eff: { flag: 'truth' },
+  then: 'ch8_night'
+},
+
+ch8_silent: {
+  lines: [
+    { t: 'Ты берёшь мешок, проверяешь вес, закидываешь за спину. Марта смотрит на тебя одобрительно — так смотрят на исправный инструмент.' },
+    { t: 'Ася идёт впереди и ни разу не оборачивается.' }
+  ],
+  then: 'ch8_night'
+},
+
+ch8_refuse: {
+  lines: [
+    { s: 'Марта', t: 'Сами так сами. Дорогу знаешь.' },
+    { t: 'Она делает шаг в сторону, и её люди делают шаг в сторону тоже. Слишком легко. Значит, впереди всё равно ждут — просто не здесь.' },
+    { s: 'Ася', t: 'Она нас пропустила.' },
+    { s: 'Егор', t: 'Она нас проводила. Это разные вещи.' }
+  ],
+  eff: { flag: 'alone' },
+  then: 'ch8_night'
+},
+
+ch8_night: {
+  lines: [
+    { t: 'Ночуете в деревне, в избе с горящим окном. Хозяев нет — Артель держит дом как перевалочный.' },
+    { t: 'Ася сидит на печи и читает шестой выпуск при свече, шевеля губами. Ты чистишь оружие, которое не собираешься применять.' },
+    { s: 'Ася', t: 'Егор.' },
+    { s: 'Егор', t: 'М.' },
+    { s: 'Ася', t: 'Если бы у тебя был выбор — довезти меня или не довезти, — ты бы что выбрал?' }
+  ],
+  choices: [
+    { t: '«Довезти. Я взял заказ».', to: 'ch8_a', eff: { trust: -2 } },
+    { t: '«Я бы спросил тебя».', to: 'ch8_b', eff: { trust: 3 }, tag: 'trust' },
+    { t: '«Я бы увёл тебя на восток».', to: 'ch8_c', eff: { trust: 2 } },
+    { t: 'Не отвечать.', to: 'ch8_d', eff: { trust: -1 } }
+  ]
+},
+
+ch8_a: {
+  lines: [
+    { s: 'Ася', t: 'Понятно.' },
+    { t: 'Она гасит свечу. Комикс остаётся раскрытым на середине — на той странице, где ястреб ещё с двумя крыльями.' }
+  ],
+  then: 'ch9_in'
+},
+
+ch8_b: {
+  lines: [
+    { s: 'Ася', t: 'Никто ни разу не спросил. За полгода — ни один.' },
+    { t: 'Она кладёт комикс на колени и смотрит в потолок.' },
+    { s: 'Ася', t: 'Спроси завтра. На плотине. Хорошо?' },
+    { s: 'Егор', t: 'Хорошо.' }
+  ],
+  eff: { flag: 'promise' },
+  journal: { t: 'Обещание', d: 'Спросить её. На плотине. Хорошо.' },
+  then: 'ch9_in'
+},
+
+ch8_c: {
+  lines: [
+    { s: 'Ася', t: 'На восток — это где?' },
+    { s: 'Егор', t: 'Где никто ничего не считает.' },
+    { t: 'Она улыбается — коротко, одним углом рта. Так улыбаются, когда очень хотят поверить и знают цену вопроса.' }
+  ],
+  then: 'ch9_in'
+},
+
+ch8_d: {
+  lines: [
+    { t: 'Ты молчишь. Она ждёт, потом кивает: ответ получен.' },
+    { t: 'Свеча догорает сама.' }
+  ],
+  then: 'ch9_in'
+}
+});
+
+Object.assign(STORY, {
+
+/* ════════ Глава IX. Плотина ════════ */
+
+ch9_in: {
+  scene: 'dam_sunset', chapter: [9, 'Плотина'],
+  lines: [
+    { t: 'Плотину видно за километр. Бетон стоит поперёк реки, как поставленная на ребро страница, и вода идёт через сбросы тремя белыми полосами.' },
+    { t: 'Она работает. Одиннадцать лет всё вокруг стояло, а эта — работает, и в окне машинного зала горит настоящий электрический свет.' },
+    { s: 'Ася', t: 'Электричество.' },
+    { s: 'Егор', t: 'Электричество.' },
+    { t: 'Вы стоите на мостках и смотрите, как заходит солнце. За спиной, метрах в тридцати, ждёт Марта и не торопит. У неё хватает терпения — у людей, которые считают тысячами, оно всегда есть.' }
+  ],
+  then: 'ch9_edge'
+},
+
+ch9_edge: {
+  lines: [
+    { t: 'Девять дней назад она была грузом. Сейчас она стоит рядом, зажав в кармане кассету, и щурится на воду.' },
+    { s: 'Ася', t: 'Красиво.' },
+    { s: 'Егор', t: 'Красиво — это когда видно далеко.' },
+    { s: 'Ася', t: 'И когда далеко видно тебя. Я запомнила.' },
+    { t: 'Тебе платят вторую половину сразу, как заведёшь её внутрь. Дальше — не твоё дело. Тебя брали за то, что ты не спрашиваешь.' },
+    { t: 'Ты стоишь и не двигаешься.' }
+  ],
+  then: 'ch9_final'
+},
+
+ch9_final: {
+  choices: [
+    { t: 'Завести её внутрь. Ты взял заказ.', to: 'end_deliver' },
+    { t: 'Взять её за руку и уйти. Здесь и сейчас.', to: 'ch9_run', tag: 'risk' },
+    { t: 'Спросить её. Как обещал.', to: 'ch9_ask', if: s => !!s.flags.promise || s.trust >= 4 || !!s.flags.truth, tag: 'trust' }
+  ]
+},
+
+ch9_run: {
+  lines: [
+    { t: 'Ты берёшь её за запястье и разворачиваешь к дороге. Тридцать метров до кустов, дальше склон, дальше темнота — если бежать сейчас, шансы есть.' },
+    { s: 'Марта', t: 'Егор.' },
+    { t: 'Голос спокойный. У её людей поднимаются стволы — не резко, буднично.' },
+    { s: 'Марта', t: 'Ты не дойдёшь до кустов.' }
+  ],
+  choices: [
+    { t: 'Бутыль с огнём — под ноги, и бежать.', to: 'end_run', if: s => (s.items.molotov || 0) > 0, eff: { take: 'molotov' } },
+    { t: 'Стрелять. Ты успеешь первым.', to: 'end_run', if: s => s.ammo >= 3, eff: { ammo: -3, hp: -20 }, tag: 'risk' },
+    { t: 'Закрыть её собой и идти к кустам шагом.', to: 'ch9_walk', tag: 'risk' },
+    { t: 'Отпустить руку.', to: 'ch9_final', eff: { flag: 'stepback' }, if: s => !s.flags.stepback }
+  ]
+},
+
+ch9_walk: {
+  lines: [
+    { t: 'Ты ставишь её за спину и идёшь. Медленно. Не оборачиваясь. Тридцать метров — это сто ударов сердца, если считать твоё.' },
+    { t: 'Марта не стреляет. Её люди смотрят на неё, она смотрит вам в спину.' },
+    { s: 'Марта', t: 'Она вернётся сама. Через год, через пять. Такие всегда возвращаются.' },
+    { t: 'Может быть. Год — это долго. Год — это целое крыло.' }
+  ],
+  eff: { hp: -10 },
+  then: 'end_run'
+},
+
+ch9_ask: {
+  lines: [
+    { t: 'Ты садишься на корточки, чтобы глаза оказались на её уровне. Так ты не делал ни разу за девять дней.' },
+    { s: 'Егор', t: 'Ася. Они не выпустят тебя обратно. Ты это знаешь?' },
+    { s: 'Ася', t: 'Знаю.' },
+    { s: 'Егор', t: 'Я могу увести тебя прямо сейчас. Будет плохо, будет голодно, будет всю жизнь оглядываться. Но ты будешь.' },
+    { t: 'Она смотрит на воду. Долго. Солнце уходит за гребень, и белые полосы сбросов становятся серыми.' },
+    { s: 'Ася', t: 'Ты правда спрашиваешь? Не для себя, а правда?' },
+    { s: 'Егор', t: 'Правда.' }
+  ],
+  then: 'ch9_decide'
+},
+
+ch9_decide: {
+  branch: s => s.trust >= 7 ? 'end_wing' : 'end_dose'
+},
+
+/* ════════ Финалы ════════ */
+
+end_deliver: {
+  scene: 'dam_sunset',
+  lines: [
+    { t: 'Ты заводишь её внутрь. Дверь машинного зала тяжёлая, на пружине, и закрывается за ней с тем самым звуком, с каким закрывается всё важное — буднично.' },
+    { t: 'Марта отсчитывает вторую половину: патроны, консервы, две канистры. Всё честно, до грамма.' },
+    { s: 'Ася', t: 'Егор.' },
+    { t: 'Ты не оборачиваешься. Если обернёшься — не уйдёшь.' }
+  ],
+  end: {
+    id: 'deliver', num: 'Финал I',
+    title: 'Заказ выполнен',
+    text: [
+      'Через шесть недель в карантинной зоне действительно появилась сыворотка. Одна партия, четыреста доз. Их хватило на детский барак и половину второго.',
+      'Дети, которым сделали укол, выросли. Некоторые до сих пор живы.',
+      'Егор ушёл на восток и больше не брал заказов, где груз умеет разговаривать. Снимок он потерял на второй зиме — или сказал себе, что потерял.',
+      'Иногда, на привале, ему кажется, что из темноты кто-то читает вслух про ястреба, который потерял крыло и всё равно летает.',
+      'Хуже, но летает.'
+    ]
+  }
+},
+
+end_run: {
+  scene: 'spring',
+  lines: [
+    { t: 'Кусты. Склон. Темнота. Никто не стреляет в спину — и это оказывается страшнее, чем если бы стреляли.' },
+    { t: 'Вы идёте на восток одиннадцать дней. Потом ещё двадцать. Потом перестаёте считать.' }
+  ],
+  end: {
+    id: 'run', num: 'Финал II',
+    title: 'Тропа на восток',
+    text: [
+      'Сыворотки не было. Ни в тот год, ни в следующий. В карантинной зоне за две зимы умерло больше, чем Егор мог бы сосчитать, — и он не считал, потому что научился этому у Марты и делал наоборот.',
+      'Они дошли до посёлка на озере, где жило тридцать человек и никто не спрашивал фамилий.',
+      'Ася выросла. Научилась ставить сети и ругаться, как взрослая. Иногда она уходила на берег одна и сидела там до темноты, и Егор не спрашивал, о чём она думает, потому что знал.',
+      'Он спас одну. Он всегда умел считать только до одного.'
+    ]
+  }
+},
+
+end_wing: {
+  scene: 'spring',
+  lines: [
+    { s: 'Ася', t: 'Тогда — уходим.' },
+    { t: 'Она говорит это просто, без вызова, как говорят решённое. И первая делает шаг к дороге.' },
+    { s: 'Ася', t: 'Только не беги. Пойдём шагом. Пусть смотрят.' },
+    { t: 'Вы уходите шагом. Марта смотрит вам в спину и не даёт команды — и до конца своих дней ты не узнаешь почему.' }
+  ],
+  end: {
+    id: 'wing', num: 'Финал III',
+    title: 'Крыло',
+    text: [
+      'Она выбрала сама. Первый раз за полгода кто-то дал ей выбрать, и она выбрала жить — не из страха, а потому что имела право.',
+      'Они шли на восток всё лето. Осенью нашли посёлок у озера, где было тридцать человек, три коровы и учительница, которая согласилась учить одну ученицу.',
+      'Через четыре года Ася вернулась к плотине сама — взрослой, со своими условиями и своим списком того, что можно и чего нельзя. Артель приняла условия: к тому времени выбирать было не из чего.',
+      'Сыворотка появилась на пятый год. Ася её пережила.',
+      'Высота — это не про крылья.'
+    ]
+  }
+},
+
+end_dose: {
+  scene: 'spring',
+  lines: [
+    { s: 'Ася', t: 'Я останусь.' },
+    { t: 'Ты открываешь рот, и она поднимает ладонь — жест взрослого человека, останавливающего чужую попытку помочь.' },
+    { s: 'Ася', t: 'Ты спросил. Значит, это моё. Не порти.' },
+    { s: 'Ася', t: 'Посиди со мной, пока солнце не сядет. Это всё, что мне надо.' },
+    { t: 'Вы сидите на мостках. Солнце садится восемнадцать минут. Ты запомнишь их поминутно.' }
+  ],
+  end: {
+    id: 'dose', num: 'Финал IV',
+    title: 'Одна партия',
+    text: [
+      'Сыворотку получили в конце февраля. Четыреста доз — одна партия, как и говорила Марта.',
+      'Егор остался на плотине до конца, хотя его никто не просил и ему за это не платили. Он был единственным, кто знал её имя, и настоял, чтобы имя записали в журнал.',
+      'В журнале Артели, между «партия №1» и «выход годного продукта», стоит строка: «Ася, 14 лет. Согласие получено».',
+      'Он ушёл весной. На востоке нашёл посёлок у озера, чинил сети и не рассказывал о себе ничего.',
+      'Каждый год в апреле он читал вслух шестой выпуск — сам себе, до конца, включая ту дурацкую фразу про высоту.'
+    ]
+  }
+},
+
+dead: {
+  scene: 'tunnel',
+  lines: [
+    { t: 'Ноги перестают держать раньше, чем ты успеваешь это заметить. Земля оказывается совсем рядом и совсем не холодной.' },
+    { s: 'Ася', t: 'Егор. Егор, вставай. Вставай!' },
+    { t: 'Ты хочешь сказать ей, куда идти дальше и кому не верить. Успеваешь сказать только имя — и, кажется, не то.' }
+  ],
+  end: {
+    id: 'dead', num: 'Финал',
+    title: 'Тишина',
+    text: [
+      'Дорогу до плотины она прошла одна. Это заняло у неё на четыре дня больше.',
+      'Что было дальше, никто не записал: журнал Артели за тот год сгорел вместе с машинным залом.',
+      'Известно только, что кто-то похоронил курьера — не закопал, а именно похоронил, с камнем в изголовье, — и оставил на камне детский комикс, придавив его гильзой, чтобы не унесло ветром.'
+    ]
+  }
+}
+});
+
+/* ───────────────────── 5. Движок новеллы ──────────────────── */
+
+const El = {
+  box: $('#box'), speaker: $('#speaker'), text: $('#text'), next: $('#next'),
+  choices: $('#choices'), hotspots: $('#hotspots'), searchbar: $('#searchbar'),
+  found: $('#found'), total: $('#total'), toasts: $('#toasts'), mini: $('#mini'),
+  chapNum: $('#chapNum'), chapName: $('#chapName'), wipe: $('#wipe')
+};
+
+const SPEAK_CLASS = { 'Егор': 'c-egor', 'Ася': 'c-asya', 'Марта': 'c-marta', 'Голос': 'c-enemy' };
+
+const Game = {
+  node: null, queue: [], typing: false, typeTimer: 0, awaiting: null, ended: false,
+
+  begin(fresh) {
+    if (fresh) { S = freshState(); drop(SAVE_KEY); }
+    this.ended = false;
+    $('#end').classList.remove('on');
+    $('#title').classList.add('off');
+    document.body.classList.add('is-reading');
+    this.go(S.node || 'start', true);
+  },
+
+  /* Переход в узел. Всё, что узел меняет в мире, применяется здесь. */
+  go(id, restoring) {
+    const n = STORY[id];
+    if (!n) { console.warn('нет узла', id); return; }
+    this.node = n; this.nodeId = id;
+    S.node = id;
+    if (!restoring) S.seen++;
+
+    if (n.branch) { return this.go(n.branch(S)); }
+
+    if (n.chapter) { S.chapter = n.chapter[0]; El.chapNum.textContent = 'Глава ' + roman(n.chapter[0]); El.chapName.textContent = n.chapter[1]; }
+    if (n.scene && Art.sceneId !== n.scene) this.swap(n.scene);
+    /* При загрузке сохранения эффекты узла уже учтены — иначе
+       патроны и находки удвоятся на каждом «Продолжить». */
+    if (n.eff && !restoring) this.apply(n.eff);
+    if (n.journal) this.addJournal(n.journal);
+    if (n.on) n.on(S);
+
+    save();
+
+    if (S.hp <= 0 && id !== 'dead') return this.go('dead');
+
+    this.clearHotspots();
+    El.searchbar.classList.remove('on');
+    this.say(n.lines || [], () => this.after(n));
+  },
+
+  swap(scene) {
+    El.wipe.classList.add('on');
+    setTimeout(() => {
+      Art.show(scene);
+      El.wipe.classList.remove('on');
+    }, 380);
+  },
+
+  /* Печать реплик по буквам, с паузами на знаках. */
+  say(lines, done) {
+    this.queue = lines.slice();
+    this.doneCb = done;
+    this.nextLine();
+  },
+
+  nextLine() {
+    clearTimeout(this.typeTimer);
+    if (!this.queue.length) { El.box.classList.remove('done'); this.doneCb && this.doneCb(); return; }
+    const ln = this.queue.shift();
+    const sp = ln.s || '';
+    El.box.classList.toggle('has-speaker', !!sp);
+    El.box.classList.toggle('narration', !sp);
+    El.box.classList.remove('done');
+    El.box.classList.add('on');
+    El.speaker.textContent = sp;
+    El.speaker.className = SPEAK_CLASS[sp] || '';
+    El.text.textContent = '';
+    this.full = ln.t;
+    this.pos = 0;
+    this.typing = true;
+    this.awaiting = 'line';
+    El.choices.classList.remove('on');
+    this.type();
+  },
+
+  type() {
+    if (!this.typing) return;
+    const step = () => {
+      if (this.pos >= this.full.length) { this.finishLine(); return; }
+      const ch = this.full[this.pos++];
+      El.text.textContent += ch;
+      if (opts.snd && this.pos % 3 === 0 && ch !== ' ') Audio_.blip(1200 + Math.random() * 300, .012, 'square', .012);
+      let d = opts.speed;
+      if ('.!?…'.includes(ch)) d = opts.speed * 12;
+      else if (',:;—'.includes(ch)) d = opts.speed * 5;
+      this.typeTimer = setTimeout(step, d);
+    };
+    step();
+  },
+
+  finishLine() {
+    clearTimeout(this.typeTimer);
+    this.typing = false;
+    El.text.textContent = this.full;
+    El.box.classList.add('done');
+  },
+
+  /* Один клик: дорисовать строку. Второй: следующая. */
+  advance() {
+    if (this.awaiting !== 'line') return;
+    if (this.typing) { this.finishLine(); return; }
+    if (opts.snd) Audio_.page();
+    this.nextLine();
+  },
+
+  after(n) {
+    this.awaiting = null;
+    if (n.end) return this.finish(n.end);
+    if (n.search) return this.runSearch(n);
+    if (n.mini) return this.runMini(n.mini);
+    if (n.choices) return this.showChoices(n.choices);
+    if (n.then) return this.go(n.then);
+  },
+
+  showChoices(list) {
+    const avail = list.filter(c => !c.if || c.if(S));
+    El.choices.innerHTML = '';
+    avail.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.className = 'choice';
+      b.dataset.key = (i + 1);
+      b.innerHTML = esc(c.t) + (c.tag ? ' <span class="tag ' + c.tag + '">' + tagName(c.tag) + '</span>' : '');
+      b.onclick = () => this.choose(c);
+      El.choices.appendChild(b);
+    });
+    El.choices.classList.add('on');
+    this.awaiting = 'choice';
+    this.currentChoices = avail;
+  },
+
+  choose(c) {
+    El.choices.classList.remove('on');
+    this.awaiting = null;
+    if (opts.snd) Audio_.click_();
+    if (c.eff) this.apply(c.eff);
+    if (S.hp <= 0) return this.go('dead');
+    this.go(c.to);
+  },
+
+  /* Осмотр сцены: точки на арте, каждая — маленький текст. */
+  runSearch(n) {
+    const key = this.nodeId;
+    S.searched[key] = S.searched[key] || [];
+    const pts = n.search.points;
+    El.total.textContent = pts.length;
+    El.found.textContent = S.searched[key].length;
+    El.searchbar.classList.add('on');
+    El.box.classList.remove('on');
+    this.awaiting = 'search';
+
+    this.clearHotspots();
+    pts.forEach((p, i) => {
+      const d = document.createElement('button');
+      d.className = 'hot' + (S.searched[key].includes(i) ? ' done' : '');
+      d.style.left = (p.x * 100) + '%';
+      d.style.top = (p.y * 100) + '%';
+      d.innerHTML = '<span class="label">' + esc(p.label) + '</span>';
+      d.onclick = () => {
+        if (S.searched[key].includes(i)) return;
+        S.searched[key].push(i);
+        d.classList.add('done');
+        El.found.textContent = S.searched[key].length;
+        if (p.eff) this.apply(p.eff);
+        if (opts.snd) Audio_.good();
+        El.choices.classList.remove('on');
+        this.awaiting = 'line';
+        this.say([{ t: p.t }], () => {
+          if (S.searched[key].length >= pts.length) { this.leaveSearch(n); }
+          else { this.awaiting = 'search'; this.searchButton(n); }
+        });
+        save();
+      };
+      El.hotspots.appendChild(d);
+    });
+    this.searchButton(n);
+  },
+
+  searchButton(n) {
+    El.choices.classList.remove('on');
+    $('#sbGo').onclick = () => this.leaveSearch(n);
+  },
+
+  leaveSearch(n) {
+    this.clearHotspots();
+    El.searchbar.classList.remove('on');
+    El.choices.classList.remove('on');
+    this.awaiting = null;
+    this.go(n.search.then);
+  },
+
+  clearHotspots() { El.hotspots.innerHTML = ''; },
+
+  /* Эффекты узла или выбора. */
+  apply(eff, silent) {
+    const bump = (el, txt, cls) => {
+      if (silent) return;
+      el.classList.add('pulse');
+      setTimeout(() => el.classList.remove('pulse'), 520);
+      toast(txt, cls);
+    };
+    if (eff.hp) {
+      S.hp = clamp(S.hp + eff.hp, 0, 100);
+      bump($('#stHp'), (eff.hp > 0 ? '+' : '') + eff.hp + ' состояние', eff.hp > 0 ? 'good' : 'bad');
+      if (opts.snd && eff.hp < 0) Audio_.thud();
+    }
+    if (eff.ammo) { S.ammo = Math.max(0, S.ammo + eff.ammo); bump($('#stAmmo'), (eff.ammo > 0 ? '+' : '') + eff.ammo + ' патроны', eff.ammo > 0 ? 'good' : ''); }
+    if (eff.sup)  { S.sup  = Math.max(0, S.sup + eff.sup);  bump($('#stSup'), (eff.sup > 0 ? '+' : '') + eff.sup + ' припасы', eff.sup > 0 ? 'good' : ''); }
+    if (eff.trust) {
+      S.trust = clamp(S.trust + eff.trust, -10, 20);
+      bump($('#stTrust'), (eff.trust > 0 ? '+' : '') + eff.trust + ' доверие', eff.trust > 0 ? 'good' : 'bad');
+    }
+    if (eff.give) [].concat(eff.give).forEach(it => {
+      S.items[it] = (S.items[it] || 0) + 1;
+      if (!silent) toast('Найдено: ' + (ITEMS[it] ? ITEMS[it].n : it), 'good');
+    });
+    if (eff.take) [].concat(eff.take).forEach(it => {
+      S.items[it] = Math.max(0, (S.items[it] || 0) - 1);
+      if (!S.items[it]) delete S.items[it];
+      if (!silent) toast('Потрачено: ' + (ITEMS[it] ? ITEMS[it].n : it));
+    });
+    if (eff.flag) S.flags[eff.flag] = true;
+    paintStats();
+  },
+
+  addJournal(j) {
+    if (S.journal.some(e => e.t === j.t)) return;
+    S.journal.push(j);
+    toast('Запись в журнале: ' + j.t);
+  },
+
+  finish(end) {
+    this.ended = true;
+    document.body.classList.add('hide-ui');
+    El.box.classList.remove('on');
+    El.choices.classList.remove('on');
+    $('#endNum').textContent = end.num;
+    $('#endTitle').textContent = end.title;
+    $('#endText').innerHTML = end.text.map(p => '<p>' + esc(p) + '</p>').join('');
+    $('#endStats').innerHTML = [
+      ['Пройдено сцен', S.seen],
+      ['Доверие', S.trust],
+      ['Состояние', S.hp],
+      ['Записей в журнале', S.journal.length],
+      ['Найдено предметов', Object.values(S.items).reduce((a, b) => a + b, 0)]
+    ].map(([k, v]) => '<span>' + k + ' <b>' + v + '</b></span>').join('');
+    drop(SAVE_KEY);
+    setTimeout(() => $('#end').classList.add('on'), 1400);
+  }
+};
+
+function save() { if (!Game.ended) store(SAVE_KEY, S); }
+function roman(n) { return ['0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][n] || n; }
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+function tagName(t) { return { risk: 'риск', cost: 'цена', trust: 'доверие' }[t] || t; }
+
+function toast(txt, cls) {
+  const d = document.createElement('div');
+  d.className = 'toast' + (cls ? ' ' + cls : '');
+  d.textContent = txt;
+  El.toasts.appendChild(d);
+  setTimeout(() => d.remove(), 3000);
+}
+
+function paintStats() {
+  $('#stHp span').textContent = S.hp;
+  $('#stAmmo span').textContent = S.ammo;
+  $('#stSup span').textContent = S.sup;
+  $('#stTrust span').textContent = S.trust;
+  $('#stHp').classList.toggle('low', S.hp <= 35);
+  $('#stAmmo').classList.toggle('low', S.ammo === 0);
+  $('#stSup').classList.toggle('low', S.sup === 0);
+}
+
+/* ── мини-сцены ────────────────────────────────────────────── */
+
+Game.runMini = function (m) {
+  this.awaiting = 'mini';
+  El.box.classList.remove('on');
+  El.choices.classList.remove('on');
+  El.mini.classList.add('on');
+  if (m.type === 'timing') this.miniTiming(m);
+  else this.miniCraft(m);
+};
+
+Game.endMini = function (to) {
+  El.mini.classList.remove('on');
+  El.mini.innerHTML = '';
+  cancelAnimationFrame(this._mraf);
+  this._mraf = 0;
+  this.awaiting = null;
+  this.go(to);
+};
+
+/* Шаг в тишине: попасть в паузу между щелчками. */
+Game.miniTiming = function (m) {
+  El.mini.innerHTML =
+    '<div class="mini-head"><h2>' + esc(m.title) + '</h2><p>' + esc(m.desc) + '</p></div>' +
+    '<div class="timing" id="tm"><div class="ticks"></div><div class="zone" id="tz"></div><div class="cursor" id="tc"></div></div>' +
+    '<div class="gauge" id="tgw"><i id="tg"></i></div>' +
+    '<div class="keyhint">шаг — <kbd>Space</kbd> или клик по полосе</div>' +
+    '<div class="mini-actions"><button class="mbtn ghost" id="tskip">Пропустить сцену</button></div>';
+
+  const bar = $('#tm'), zone = $('#tz'), cur = $('#tc'), gauge = $('#tg');
+  let done = 0, span = m.span, t0 = performance.now(), zs = 0, zw = m.zone;
+  const newZone = () => {
+    zw = Math.max(.14, m.zone - done * .03);
+    zs = rr(Math.random, .06, .94 - zw);
+    zone.style.left = (zs * 100) + '%';
+    zone.style.width = (zw * 100) + '%';
+    zone.classList.toggle('perfect', done === m.rounds - 1);
+  };
+  newZone();
+
+  const pos = () => {
+    const k = ((performance.now() - t0) % (span * 2)) / span;
+    return k <= 1 ? k : 2 - k;
+  };
+  const loop = () => {
+    this._mraf = requestAnimationFrame(loop);
+    cur.style.left = (pos() * 100) + '%';
+  };
+  loop();
+
+  const hit = () => {
+    if (!this._mraf) return;
+    const p = pos();
+    if (p >= zs && p <= zs + zw) {
+      done++;
+      if (opts.snd) Audio_.good();
+      gauge.style.width = (done / m.rounds * 100) + '%';
+      if (done >= m.rounds) { this.endMini(m.ok); return; }
+      span = Math.max(700, span - 190);
+      t0 = performance.now();
+      newZone();
+    } else {
+      if (opts.snd) Audio_.bad();
+      $('#tgw').classList.add('crit');
+      setTimeout(() => this.endMini(m.fail), 450);
+      cancelAnimationFrame(this._mraf); this._mraf = 0;
+    }
+  };
+  this._miniHit = hit;
+  bar.onclick = hit;
+  $('#tskip').onclick = () => this.endMini(m.ok);
+};
+
+/* Крафт: соединить то, что нашлось по дороге. */
+const RECIPES = [
+  { id: 'molotov', need: { spirt: 1, rag: 1, bottle: 1 }, n: 'Бутыль с огнём' },
+  { id: 'bandage', need: { spirt: 1, rag: 1 }, n: 'Перевязка' }
+];
+
+Game.miniCraft = function (m) {
+  const parts = ['spirt', 'rag', 'bottle', 'tape', 'blade'];
+  const sel = new Set();
+
+  const render = () => {
+    const have = parts.filter(p => (S.items[p] || 0) > 0);
+    El.mini.innerHTML =
+      '<div class="mini-head"><h2>' + esc(m.title) + '</h2><p>' + esc(m.desc) + '</p></div>' +
+      '<div class="parts">' + (have.length
+        ? have.map(p => '<button class="part" data-p="' + p + '" aria-pressed="' + sel.has(p) + '">' +
+            esc(ITEMS[p].n) + ' <em style="color:var(--amber);font-style:normal">×' + S.items[p] + '</em></button>').join('')
+        : '<p class="empty">Собирать нечего. Всё, что было, уже потрачено.</p>') + '</div>' +
+      '<div class="mini-actions">' +
+        '<button class="mbtn" id="cmake">Собрать</button>' +
+        '<button class="mbtn ghost" id="cgo">Идти дальше</button>' +
+      '</div>';
+
+    $$('.part', El.mini).forEach(b => {
+      b.onclick = () => {
+        const p = b.dataset.p;
+        sel.has(p) ? sel.delete(p) : sel.add(p);
+        render();
+      };
+    });
+    $('#cmake').onclick = () => {
+      const r = RECIPES.find(rc => {
+        const keys = Object.keys(rc.need);
+        return keys.length === sel.size && keys.every(k => sel.has(k));
+      });
+      if (!r) { toast('Так не собирается', 'bad'); if (opts.snd) Audio_.bad(); return; }
+      Object.keys(r.need).forEach(k => this.apply({ take: k }));
+      this.apply({ give: r.id });
+      if (opts.snd) Audio_.good();
+      sel.clear();
+      render();
+    };
+    $('#cgo').onclick = () => this.endMini(m.ok);
+  };
+  render();
+};
+
+/* ─────────────────── 6. Интерфейс и запуск ────────────────── */
+
+/* Клик по кадру — следующая реплика. Клики по интерфейсу не в счёт. */
+addEventListener('pointerdown', e => {
+  if (e.target.closest('.choice, .hot, .iconbtn, .panel, #mini, #title, #end, .mbtn')) return;
+  if (Game.awaiting === 'line') Game.advance();
+});
+
+addEventListener('keydown', e => {
+  if ($('#title').classList.contains('off') === false) {
+    if (e.key === 'Enter') { e.preventDefault(); $('#btnNew').click(); }
+    return;
+  }
+  const openPanel = $$('.panel.on')[0];
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (openPanel) closePanels(); else $('#btnMenu').click();
+    return;
+  }
+  if (openPanel) return;
+
+  if (e.key === ' ' || e.key === 'Enter') {
+    e.preventDefault();
+    if (Game.awaiting === 'line') Game.advance();
+    else if (Game.awaiting === 'mini' && Game._miniHit) Game._miniHit();
+    return;
+  }
+  if (Game.awaiting === 'choice' && /^[1-9]$/.test(e.key)) {
+    const i = +e.key - 1;
+    const b = $$('.choice', El.choices)[i];
+    if (b) { e.preventDefault(); b.click(); }
+    return;
+  }
+  if (Game.awaiting === 'search' && /^[1-9]$/.test(e.key)) {
+    const h = $$('.hot:not(.done)', El.hotspots)[+e.key - 1];
+    if (h) { e.preventDefault(); h.click(); }
+    return;
+  }
+  const k = e.key.toLowerCase();
+  if (k === 'j' || k === 'о') $('#btnJournal').click();
+  if (k === 'i' || k === 'ш') $('#btnBag').click();
+  if (k === 'm' || k === 'ь') $('#btnSound').click();
+});
+
+/* ── панели ────────────────────────────────────────────────── */
+
+function closePanels() { $$('.panel').forEach(p => p.classList.remove('on')); }
+function openPanel(id) { closePanels(); $(id).classList.add('on'); if (opts.snd) Audio_.page(); }
+
+$$('[data-close]').forEach(b => b.onclick = closePanels);
+$$('.panel').forEach(p => p.addEventListener('pointerdown', e => { if (e.target === p) closePanels(); }));
+
+$('#btnJournal').onclick = () => {
+  const body = $('#journalBody');
+  body.innerHTML = S.journal.length
+    ? S.journal.map(e => '<div class="entry"><h3>' + esc(e.t) + '</h3><p>' + esc(e.d) + '</p></div>').join('')
+    : '<p class="empty">Пока записывать нечего. Дорога только началась.</p>';
+  openPanel('#panelJournal');
+};
+
+$('#btnBag').onclick = () => {
+  $('#bagStats').innerHTML = [
+    ['Состояние', S.hp, 100, ''],
+    ['Патроны', S.ammo, 12, ''],
+    ['Припасы', S.sup, 12, ''],
+    ['Доверие', S.trust, 12, 'trust']
+  ].map(([n, v, max, cls]) =>
+    '<div class="row ' + cls + '"><span style="min-width:96px">' + n + '</span>' +
+    '<span class="bar"><i style="width:' + clamp(v / max * 100, 0, 100) + '%"></i></span><b>' + v + '</b></div>'
+  ).join('');
+
+  const keys = Object.keys(S.items).filter(k => S.items[k] > 0);
+  $('#bagBody').innerHTML = keys.length
+    ? '<div class="items">' + keys.map(k => {
+        const it = ITEMS[k] || { n: k, d: '' };
+        return '<div class="item"><div class="n">' + esc(it.n) +
+          (S.items[k] > 1 ? '<em>×' + S.items[k] + '</em>' : '') +
+          '</div><p class="d">' + esc(it.d) + '</p></div>';
+      }).join('') + '</div>'
+    : '<p class="empty">Рюкзак пуст. Как и всегда после плохой недели.</p>';
+  openPanel('#panelBag');
+};
+
+$('#btnSound').onclick = () => {
+  opts.snd = opts.snd ? 0 : 1;
+  store(OPT_KEY, opts);
+  syncSegs();
+  if (opts.snd) { Audio_.on(); Audio_.ambience(Art.scene ? Art.scene.amb : 'wind'); Audio_.good(); }
+  else Audio_.off();
+  $('#btnSound').style.color = opts.snd ? 'var(--amber-soft)' : '';
+};
+
+$('#btnMenu').onclick = () => openPanel('#panelSettings');
+$('#btnSettings').onclick = () => openPanel('#panelSettings');
+$('#btnAbout').onclick = () => openPanel('#panelAbout');
+
+$('#btnWipe').onclick = () => {
+  drop(SAVE_KEY);
+  $('#btnContinue').disabled = true;
+  toast('Сохранение стёрто');
+};
+
+/* ── настройки ─────────────────────────────────────────────── */
+
+function segInit(id, key, after) {
+  $$('#' + id + ' button').forEach(b => {
+    b.onclick = () => {
+      opts[key] = +b.dataset.v;
+      store(OPT_KEY, opts);
+      syncSegs();
+      after && after();
+    };
+  });
+}
+function syncSegs() {
+  const map = { segSpeed: 'speed', segFx: 'fx', segSnd: 'snd', segGrain: 'grain' };
+  Object.keys(map).forEach(id => {
+    $$('#' + id + ' button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.v === +opts[map[id]]));
+  });
+  $('#btnSound').style.color = opts.snd ? 'var(--amber-soft)' : '';
+}
+segInit('segSpeed', 'speed');
+segInit('segFx', 'fx', () => Art.seedParticles());
+segInit('segGrain', 'grain');
+segInit('segSnd', 'snd', () => {
+  if (opts.snd) { Audio_.on(); Audio_.ambience(Art.scene ? Art.scene.amb : 'wind'); }
+  else Audio_.off();
+});
+
+/* ── старт ─────────────────────────────────────────────────── */
+
+$('#btnNew').onclick = () => { closePanels(); if (opts.snd) Audio_.on(); Game.begin(true); };
+$('#btnContinue').onclick = () => {
+  const s = load(SAVE_KEY);
+  if (!s) return;
+  S = Object.assign(freshState(), s);
+  closePanels();
+  if (opts.snd) Audio_.on();
+  paintStats();
+  Game.begin(false);
+};
+$('#btnAgain').onclick = () => { $('#end').classList.remove('on'); document.body.classList.remove('hide-ui'); Game.begin(true); };
+$('#btnToTitle').onclick = () => {
+  $('#end').classList.remove('on');
+  document.body.classList.remove('hide-ui', 'is-reading');
+  El.box.classList.remove('on');
+  El.choices.classList.remove('on');
+  Game.clearHotspots();
+  $('#title').classList.remove('off');
+  $('#btnContinue').disabled = !load(SAVE_KEY);
+  Art.show('qz_night');
+};
+
+/* Первый жест пользователя разблокирует WebAudio. */
+addEventListener('pointerdown', function once() {
+  if (opts.snd) Audio_.on();
+  removeEventListener('pointerdown', once);
+}, { once: true });
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) Art.stop(); else Art.start();
+});
+
+Art.boot();
+Art.show('qz_night');
+paintStats();
+syncSegs();
+$('#btnContinue').disabled = !load(SAVE_KEY);
+if ($('#btnContinue').disabled === false) $('#btnContinue').textContent = 'Продолжить путь';
+
+</script>
+</body>
+</html>
